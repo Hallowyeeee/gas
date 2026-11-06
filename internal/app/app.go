@@ -71,8 +71,33 @@ func migrate(db *sql.DB) error {
 			return fmt.Errorf("建立資料庫失敗: %w", err)
 		}
 	}
-	// 之後的版本升級寫在這裡：讀 schema_version，逐版執行。
+	// 舊版資料庫逐版升級
+	var ver int
+	if err := db.QueryRow(`SELECT MAX(version) FROM schema_version`).Scan(&ver); err != nil {
+		return err
+	}
+	for i := ver; i < len(upgrades); i++ {
+		if _, err := db.Exec(upgrades[i]); err != nil {
+			return fmt.Errorf("資料庫升級到第 %d 版失敗: %w", i+1, err)
+		}
+		if _, err := db.Exec(`UPDATE schema_version SET version = ?`, i+1); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// upgrades[i] 把第 i 版升到第 i+1 版（第 0 格不用，新資料庫直接用 schema.sql）。
+var upgrades = []string{
+	0: "",
+	1: `CREATE TABLE IF NOT EXISTS call_logs (
+	  id          INTEGER PRIMARY KEY,
+	  phone       TEXT    NOT NULL,
+	  customer_id INTEGER REFERENCES customers(id),
+	  source      TEXT    NOT NULL DEFAULT 'box' CHECK (source IN ('box','test')),
+	  received_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+	);
+	CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs(received_at);`,
 }
 
 // ---------------------------------------------------------------------

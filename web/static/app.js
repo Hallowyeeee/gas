@@ -129,6 +129,7 @@ function connectEvents() {
   es = new EventSource('/api/events');
   es.onmessage = ev => {
     let e; try { e = JSON.parse(ev.data); } catch { return; }
+    if (e.type === 'call' && S.me && S.me.role !== 'driver') { showCall(e.call); return; }
     if (e.type === 'dispatch') {
       beep();
       toast('🔔 新派單：' + e.message, 'ok');
@@ -143,6 +144,105 @@ function connectEvents() {
 setInterval(() => rerender(), 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { flush(); rerender(); } });
 window.addEventListener('online', () => flush());
+
+// ---------------------------------------------------------------------
+// 來電顯示：電話一響，右下角跳出客人資料
+// ---------------------------------------------------------------------
+const callSoundOn = () => store.get('callSound', true);
+function ring() {
+  if (!callSoundOn()) return;
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.12, 0.24, 0.7, 0.82, 0.94].forEach(at => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = at < 0.5 ? 988 : 784; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.22, ctx.currentTime + at);
+      o.start(ctx.currentTime + at); o.stop(ctx.currentTime + at + 0.09);
+    });
+  } catch { }
+}
+const fmtPhone = p => { p = String(p || ''); return /^09\d{8}$/.test(p) ? p.replace(/(\d{4})(\d{3})(\d{3})/, '$1-$2-$3') : /^0\d{9}$/.test(p) ? p.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3') : p; };
+
+function callCustomerHTML(c) {
+  const lo = c.last_order;
+  const days = lo ? (lo.days_ago <= 0 ? '今天' : lo.days_ago + ' 天前') : '';
+  const late = lo && c.refill_days && lo.days_ago >= c.refill_days;
+  return `<div class="call-name">${esc(c.name)}</div>
+    <div class="call-addr">${esc(c.address)}${c.floor ? '・' + esc(c.floor) : ''}${c.has_elevator === 0 ? '・<b>無電梯</b>' : c.has_elevator === 1 ? '・有電梯' : ''}</div>
+    <div class="row" style="gap:6px;margin:6px 0">
+      ${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : '<span class="pill">現結</span>'}
+      ${c.balance > 0 ? `<span class="pill bad">欠 ${money(c.balance)}</span>` : ''}
+      ${c.needs_invoice ? `<span class="pill">開發票${c.tax_id ? ' ' + esc(c.tax_id) : ''}</span>` : ''}
+      ${c.default_driver_name ? `<span class="pill">固定師傅 ${esc(c.default_driver_name)}</span>` : ''}
+    </div>
+    ${c.open_orders > 0 ? `<div class="call-warn">⚠ 已經有 ${c.open_orders} 張單還沒送到，可能是來催的</div>` : ''}
+    <div class="call-last">${lo
+      ? `上次 <b>${days}</b>（${esc((lo.delivered_at || lo.ordered_at || '').slice(5, 10).replace('-', '/'))}）${late ? ' <span class="pill accent">該換瓶了</span>' : ''}<br>
+         ${esc(lo.items || '')}・${money(lo.total_amount)}${lo.driver_name ? '・' + esc(lo.driver_name) + ' 送' : ''}`
+      : '還沒有訂過'}</div>
+    ${c.note ? `<div class="muted">📝 ${esc(c.note)}</div>` : ''}`;
+}
+
+function showCall(call) {
+  const box = $('#call'); if (!box) return;
+  const list = call.matches || [];
+  let cur = list[0];
+  const draw = () => {
+    box.innerHTML = `<div class="call-head"><span>📞 來電 <b>${esc(fmtPhone(call.phone))}</b>${call.source === 'test' ? '<span class="pill" style="margin-left:6px">模擬</span>' : ''}</span>
+        <button class="ghost" data-a="close" title="關閉">✕</button></div>
+      ${list.length > 1 ? `<div class="segment">${list.map((c, i) => `<button data-i="${i}" class="${c === cur ? 'on' : ''}">${esc(c.name)}</button>`).join('')}</div>` : ''}
+      ${cur ? callCustomerHTML(cur) : `<div class="call-name">新客人</div><div class="muted">這支號碼還沒有存過</div>`}
+      <div class="row" style="margin-top:10px">
+        ${cur ? `<button class="primary" data-a="order" style="flex:1">開新單</button><button data-a="detail">客戶資料</button>`
+              : `<button class="primary" data-a="newcust" style="flex:1">建立新客人</button>`}
+      </div>`;
+  };
+  draw();
+  box.hidden = false;
+  box.classList.remove('in'); void box.offsetWidth; box.classList.add('in');
+  ring();
+  if (document.hidden && window.Notification && Notification.permission === 'granted') {
+    navigator.serviceWorker?.ready.then(r => r.showNotification('來電 ' + fmtPhone(call.phone), { body: cur ? cur.name + '｜' + cur.address : '新客人', tag: 'call' }));
+  }
+  const goOrder = c => { S.callPick = c; box.hidden = true; if (location.hash === '#/new') route(); else location.hash = '#/new'; };
+  box.onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.i) { cur = list[+b.dataset.i]; draw(); return; }
+    const a = b.dataset.a;
+    if (a === 'close') box.hidden = true;
+    if (a === 'order') goOrder(cur);
+    if (a === 'detail') { box.hidden = true; location.hash = '#/customers/' + cur.id; }
+    if (a === 'newcust') customerDialog({ phone: call.phone }, c => goOrder(c));
+  };
+}
+
+async function callSettingsCard() {
+  const calls = await api('GET', '/api/calls').catch(() => []);
+  return `<div class="card" id="callcard"><h3 style="margin-top:0">☎ 來電顯示</h3>
+    <div class="muted">來電顯示盒：等確認型號後接上。現在可以先用「模擬來電」看跳出來的樣子。</div>
+    <label style="color:var(--text)"><input type="checkbox" id="callSound" ${callSoundOn() ? 'checked' : ''}>來電時響提示音（這台電腦）</label>
+    <div class="row" style="margin-top:8px"><input id="testPhone" placeholder="輸入電話號碼，例如 0912345678" style="max-width:280px" inputmode="tel"><button id="testCall">模擬來電</button></div>
+    <h3>今天的來電 <span class="pill">${calls.length}</span></h3>
+    ${calls.length ? `<div class="table-wrap"><table><tr><th>時間</th><th>號碼</th><th>客戶</th><th>有沒有下單</th></tr>
+      ${calls.map(l => `<tr><td>${hhmm(l.received_at)}</td><td>${esc(fmtPhone(l.phone))}${l.source === 'test' ? ' <span class="pill">模擬</span>' : ''}</td>
+        <td>${l.customer_id ? `<a href="#/customers/${l.customer_id}">${esc(l.customer_name)}</a>` : '<span class="muted">新客人</span>'}</td>
+        <td>${l.order_no ? '<span class="pill ok">' + esc(l.order_no) + '</span>' : '<span class="pill">沒有</span>'}</td></tr>`).join('')}</table></div>`
+      : '<div class="muted">今天還沒有來電</div>'}</div>`;
+}
+function bindCallSettings(view) {
+  const cb = $('#callSound', view); if (!cb) return;
+  cb.onchange = () => store.set('callSound', cb.checked);
+  const go = async () => {
+    const v = $('#testPhone').value.trim();
+    if (!v) return toast('請輸入電話號碼', 'bad');
+    try {
+      await api('POST', '/api/calls/test', { phone: v });
+      $('#callcard').outerHTML = await callSettingsCard(); bindCallSettings(view);
+    } catch (e) { toast(e.message, 'bad'); }
+  };
+  $('#testCall').onclick = go;
+  $('#testPhone').onkeydown = e => { if (e.key === 'Enter') go(); };
+}
 
 // ---------------------------------------------------------------------
 // 路由
@@ -160,7 +260,7 @@ function shell(nav) {
       <span class="muted" style="white-space:nowrap">${esc(S.me.name)}</span>
       <button class="ghost" id="logout">登出</button>
     </div></header>
-    <main id="view"></main><div id="toast"></div><dialog id="dlg"></dialog>`;
+    <main id="view"></main><div id="toast"></div><dialog id="dlg"></dialog><aside id="call" hidden></aside>`;
   $('#logout').onclick = async () => {
     if (outbox.length && !confirm('還有資料沒送出，確定登出？')) return;
     await api('POST', '/api/logout').catch(() => { });
@@ -343,6 +443,7 @@ async function officeNew(view) {
   q.onkeydown = e => { if (e.key === 'Enter' && st.results[0]) pick(st.results[0]); };
   $('#results').onclick = e => { const r = e.target.closest('.result'); if (r) pick(st.results[+r.dataset.i]); };
   $('#newCust').onclick = () => customerDialog({ phone: /^\d+$/.test(q.value.trim()) ? q.value.trim() : '', name: /^\d+$/.test(q.value.trim()) ? '' : q.value.trim() }, c => pick(c));
+  if (S.callPick) { const c = S.callPick; S.callPick = null; q.value = c.phone || c.name || ''; st.results = [c]; pick(c); }
 
   function pick(c) {
     st.customer = c; st.qty = {};
@@ -608,7 +709,8 @@ async function reconcile(view) {
 async function settings(view) {
   const [sys, users, cfg] = await Promise.all([api('GET', '/api/system'), S.me.role === 'admin' ? api('GET', '/api/users') : [], api('GET', '/api/settings')]);
   const admin = S.me.role === 'admin';
-  view.innerHTML = `<h2>設定</h2>
+  const callCard = await callSettingsCard();
+  view.innerHTML = `<h2>設定</h2>${callCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -629,6 +731,7 @@ async function settings(view) {
       <button class="primary" id="updApply" ${sys.update && sys.update.available && sys.local ? '' : 'hidden'}>立即更新</button></p>
       ${sys.local ? '' : '<div class="muted">更新只能在店裡的電腦上按。</div>'}</div>` : `<p class="muted">版本 ${esc(sys.version)}</p>`}`;
   S.live = false;
+  bindCallSettings(view);
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   if (!admin) return;
   $('#updCheck').onclick = async () => {

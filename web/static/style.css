@@ -118,6 +118,18 @@ tr.click:hover td { background:var(--bg); }
 dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); padding:18px; width:min(94vw,560px); max-height:90vh; }
 dialog::backdrop { background:rgba(0,0,0,.4); }
 
+/* 來電顯示 */
+#call { position:fixed; right:16px; bottom:16px; z-index:90; width:min(380px,calc(100vw - 32px)); background:var(--card); border:2px solid var(--accent); border-radius:14px; padding:14px; box-shadow:0 8px 28px rgba(0,0,0,.28); }
+#call.in { animation:callin .25s ease-out; }
+@keyframes callin { from { transform:translateY(20px); opacity:0; } to { transform:none; opacity:1; } }
+.call-head { display:flex; justify-content:space-between; align-items:center; color:var(--accent); margin:-4px 0 6px; }
+.call-head b { font-size:18px; color:var(--text); font-variant-numeric:tabular-nums; }
+.call-head button { padding:4px 8px; color:var(--muted); }
+.call-name { font-size:24px; font-weight:700; }
+.call-addr { font-size:16px; margin-top:2px; }
+.call-last { background:var(--bg); border-radius:8px; padding:8px 10px; font-size:15px; margin:6px 0; }
+.call-warn { background:var(--bad-soft); color:var(--bad); border-radius:8px; padding:6px 10px; font-size:14px; font-weight:600; margin:6px 0; }
+
 /* 登入 */
 .center { max-width:420px; margin:40px auto; }
 #qr { background:#fff; display:inline-block; padding:8px; border-radius:8px; }

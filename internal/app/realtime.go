@@ -17,9 +17,10 @@ import (
 // ---------------------------------------------------------------------
 
 type Event struct {
-	Type    string         `json:"type"`              // "orders" 資料有變、"dispatch" 有新派單
+	Type    string         `json:"type"`              // "orders" 資料有變、"dispatch" 有新派單、"call" 來電
 	Message string         `json:"message,omitempty"` // 通知文字
 	Order   map[string]any `json:"order,omitempty"`
+	Call    map[string]any `json:"call,omitempty"` // "call" 有電話打進來
 }
 
 type sub struct {
