@@ -79,6 +79,11 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	for i := ver; i < len(upgrades); i++ {
+		if i == 2 {
+			if err := ensureColumn(db, "customers", "legacy_id", "TEXT"); err != nil {
+				return err
+			}
+		}
 		if _, err := db.Exec(upgrades[i]); err != nil {
 			return fmt.Errorf("資料庫升級到第 %d 版失敗: %w", i+1, err)
 		}
@@ -87,6 +92,19 @@ func migrate(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// ensureColumn 欄位還沒有才加（ALTER TABLE 重複加會失敗）。
+func ensureColumn(db *sql.DB, table, col, typ string) error {
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, col).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, typ))
+	return err
 }
 
 // upgrades[i] 把第 i 版升到第 i+1 版（第 0 格不用，新資料庫直接用 schema.sql）。
@@ -100,6 +118,7 @@ var upgrades = []string{
 	  received_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 	);
 	CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs(received_at);`,
+	2: gasdb.Legacy,
 }
 
 // ---------------------------------------------------------------------

@@ -15,6 +15,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,14 +38,15 @@ jobs:
           cd cmd/gas && go-winres make --arch amd64
 
       - name: 打包 gas.exe
+        id: ver
         run: |
           VERSION="$(TZ=Asia/Taipei date +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/callerid-probe.exe ./cmd/boxprobe
           cp docs/試跑教學.md dist/guide.md
           {
-            echo "下載 gas.exe，放到店裡電腦的一個資料夾（例如 C:\\瓦斯行），雙擊執行。教學請看 guide.md。"
+            echo "第一次安裝：下載 gas-setup.exe 雙擊安裝。已經裝好的電腦：在程式「設定」→「程式更新」按更新即可。"
             echo
             echo "callerid-probe.exe：來電盒偵測小工具，雙擊後照畫面打一通電話進來，結果會存成文字檔。"
             echo
@@ -53,13 +56,44 @@ jobs:
             git log -8 --pretty='- %s' | grep -v '^- Merge'
           } > dist/notes.md
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  installer:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: 下載 Cloudflare 通道程式、中文語言檔
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe -OutFile dist/cloudflared.exe
+          try { Invoke-WebRequest https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/ChineseTraditional.isl -OutFile installer/ChineseTraditional.isl } catch { Write-Host "沒有中文語言檔，用英文介面" }
+
+      - name: 編譯安裝檔
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          & $iscc "/DAppVersion=${{ needs.build.outputs.version }}" installer\gas.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
       - name: 發布到「最新版」下載頁
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: 最新版 ${{ env.VERSION }}
+          name: 最新版 ${{ needs.build.outputs.version }}
           body_path: dist/notes.md
           files: |
+            dist/gas-setup.exe
             dist/gas.exe
             dist/callerid-probe.exe
             dist/guide.md

@@ -1,0 +1,2326 @@
+
+<!-- saved from url=(0100)http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&customer_id=86000&caller=T -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<title>客戶的滿意是捷誠的責任</title>
+	
+	<script>
+		var appRoot 	= "/gas_station/";		// 共用參數, 修改時請注意!!
+		var addrGroup 	= "";
+		var addrCid 	= "1" ;
+		var appArea		= "";
+		var DeliveryUri = "http://127.0.0.1:9945/";
+		var PrintInvoiceUrl = "http://127.0.0.1:9947/";  // 發票
+		var BarcodeUri	= "http://127.0.0.1:9946/";
+		var fNameSet	= "_1_";
+		var connectSing = true;
+	</script>
+	<script src="./jquery-1.10.2.min.js.下載"></script>
+	<script src="./date.js.下載"></script>
+	<script src="./utils(1).js.下載"></script>
+	<script src="./lazyFunc.js.下載"></script>
+	<script src="./2-layer_.js.下載"></script>
+	<script src="./ie.xhr.js.下載"></script>
+	<script src="./CityRoad.js.下載"></script>
+	<script src="./SmartType.js.下載"></script>
+	<script src="./Title.js.下載"></script>
+	<script src="./calendar.js.下載"></script>
+	<script>
+
+		var short_name='新福行/春進瓦斯行';
+
+		var gogaspage = function(v) {
+			if (v === "1") {
+				location.href = appRoot + 'gas_record/gas_record.asp?tit_loc=' + search_form.tit_loc.value + '&groups=' + addrGroup;
+			}
+			if (v === "2") {
+				location.href = appRoot + 'gas_record/gas_record.asp?groups=' + search_form.groups.value + '&';
+			}
+		}
+	</script>
+	<link rel="stylesheet" href="./Title.css">
+	<link rel="stylesheet" href="./gas_current.css">
+	<link rel="stylesheet" href="./css(1).css">
+	<link rel="stylesheet" href="./main_.css">
+	<link rel="stylesheet" href="./calendar.css">
+<script type="text/javascript" charset="UTF-8" src="./common.js.下載"></script><script type="text/javascript" charset="UTF-8" src="./util.js.下載"></script></head>
+
+<body topmargin="0" onload="search_form.target.focus();" style="">
+<form name="search_form" action="http://www.easy88.com.tw:20040/gas_station/customer/customer.asp" method="post">
+<input type="hidden" name="target_cid" value="1" autocomplete="off">
+<input type="hidden" name="target_group" value="" autocomplete="off">
+<input type="hidden" name="xbtn" value="搜尋資料" autocomplete="off">
+<input type="hidden" name="outPage" value="order" autocomplete="off">
+<input type="hidden" id="_target" name="_target" size="16" autocomplete="off">
+
+<table width="100%" border="0">
+	<tbody><tr>
+		<td width="39%">
+			<table width="100%" border="1" align="center" cellspacing="0">
+				<tbody><tr height="30">
+					<td colspan="3">
+						<select id="city" name="edtODTown"><option value="">請選擇</option></select>　
+						<select id="road" name="edtODRoad"><option value="">請選擇</option></select>　
+						<select name="customer_type" onchange="this.form.submit()">
+							<!-- Get Application Cache (option_cache_customer_type_1_) -->
+<!-- Get Application Cache (option_cache_customer_type_1_) -->
+<!-- Use Cache -->
+<option value="">請選擇分類</option>
+
+						</select><!--&nbsp;<a href="/gas_station/report/Accounting.asp"><font size="3" color="blue">&nbsp;&nbsp;&nbsp;出納表</font></a>-->
+						&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+						&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://line.easy88.com.tw/home/stationset?SID=20040&amp;ViewCode=Ud7b2252e973d03aa291ad47a9ea17e08" target="stationset" title="Wibibi 網頁設計教學百科">Line 設定</a>
+						<a href="http://www.easy88.com.tw:20040/gas_station/spend/spend.asp"><font size="3" color="#ffffff">&nbsp;&nbsp;&nbsp;新流水帳</font></a>
+						
+					</td>
+				</tr><tr height="30">
+		            <td align="center">
+							<input type="text" id="target" name="target" autocomplete="off" size="8" class="">&nbsp;&nbsp;
+							名稱&nbsp;<input type="text" id="target_name" name="target_name" autocomplete="off" size="7">
+							電話&nbsp;<input type="text" id="target_tel" name="target_tel" autocomplete="off" size="7">
+							地址&nbsp;<input type="text" id="target_addr" name="target_addr" autocomplete="off" size="7">
+		            </td>
+		            <td align="center">
+						<input type="submit" name="button" value="搜尋" autocomplete="off">
+					</td>
+				</tr>
+			</tbody></table>
+		</td>
+		<td width="22%" align="center">
+			<a href="http://www.easy88.com.tw:20040/gas_station/berrel/modify.asp"><b><font size="6" color="blue">新福行/春進瓦斯行</font></b></a>
+
+	    </td>
+		<td width="39%" valign="top" id="title_right_info">
+			
+	<table width="100%" border="1" align="center" cellspacing="0">
+		<tbody><tr height="30" align="center">
+			<td bgcolor="e4e7b1" nowrap="" align="center">
+				<a href="http://www.easy88.com.tw:20040/gas_station/setup/supply1.asp"><font color="blue">庫存數量(重)</font></a>
+
+			</td>
+			<td width="14%" id="total_F_qty50" class="css1">-8198</td>
+			<td width="14%" id="total_F_qty20" class="css1">-4337</td>
+			
+				<td width="14%" id="total_F_qty18" class="css1">-8073</td>
+			
+			<td width="14%" id="total_F_qty16" class="css1">-66660</td>
+			<td width="14%" id="total_F_qty10" class="css1">-7926</td>
+			
+				<td width="14%" id="total_F_qtyn4" class="css1">-445</td>
+			
+			<td width="14%" id="total_F_qty4" class="css1">-2084</td>
+		</tr>
+		<tr height="30" align="center">
+			
+				<td align="center">&nbsp;</td>
+                <td width="14%" class="css1"> </td>
+<td width="14%" class="css1"> </td>
+
+				<td width="14%" id="total_E_qty50" class="css1">16258</td>
+				<td width="14%" id="total_E_qty20" class="css1">70630</td>
+				
+				<td width="14%" id="total_E_qty16" class="css1">7945</td>
+				<td width="14%" id="total_E_qty10" class="css1">442</td>
+				
+				<td width="14%" id="total_E_qty4" class="css1">2085</td>
+			
+		</tr>
+	</tbody></table>
+	<script>
+		$(function () {
+			ajaxQuantity("", "", "", "T", "T", "", "1");
+		});
+	</script>
+
+		</td>
+	</tr>
+</tbody></table>
+</form>
+<style>
+	.newsMap{
+		position: absolute;
+		top: 3%;
+		left: 57%;
+		cursor: pointer;
+	}
+</style>
+<script>
+	function ALLMAP(){
+		
+	}
+</script>
+<div class="newsMap" onclick="window.open('/gas_station/include/New_map.asp?SID=5971','New_', 'width=1020,height=720,menubar=no,toolbar=no,location=no, directories=no, status=no,resizable=no,scrollbars=yes,top=0,left=0')">
+	<img src="./show_map.png" alt="Smiley face" height="42" width="42" hidden="">
+</div>
+<table bgcolor="336699" cellspacing="0" cellpadding="0" width="100%" border="0">
+<tbody><tr class="mm">
+<td height="26" bgcolor="cc9900" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/gas_record/gas_record.asp?xbtn=login&amp;23:14:44"><font color="000000">訂單紀錄</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/tel_record/tel.asp"><font color="ffffff">來電紀錄</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/customer/customer.asp?23:14:44"><font color="ffffff">客戶資料</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/report/report_today.asp?23:14:44"><font color="ffffff">營業報表</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/spend/spend.asp?23:14:44"><font color="ffffff">流水帳</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/stove/stove_record.asp?23:14:44"><font color="ffffff">爐具產品</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/berrel/berrel.asp?23:14:44"><font color="ffffff">瓦斯桶</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/stock/stock.asp?23:14:44"><font color="ffffff">灌氣</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/month/month.asp?23:14:44"><font color="ffffff">月結作業</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/setup/time_table.asp?23:14:44"><font color="ffffff">常用設定</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/other/feedback.asp?23:14:44"><font color="ffffff">回報訊息</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/employee/employee.asp?target_location=all&amp;23:14:44"><font color="ffffff">員工資料</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/other/connecter.asp?23:14:44"><font color="ffffff">聯絡事項</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/barcode/set_code.asp?23:14:44"><font color="ffffff">條碼</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" bgcolor="336699" nowrap="">&nbsp;&nbsp;
+<a href="http://www.easy88.com.tw:20040/gas_station/logout.asp?23:14:44" target="_parent"><font color="ffffff">登出</font></a>
+&nbsp;&nbsp;</td><td class="mms"><img src="./space.gif" width="1" border="0"></td>
+<td height="26" width="100%">&nbsp;</td></tr>
+</tbody></table>
+<script type="text/javascript" src="./feedback.js.下載"></script>
+<table width="100%" border="1" align="center" cellspacing="0" bordercolor="#b8d0dc" id="tabFeedback">
+</table>
+
+<script>
+var jsObj = { 
+   refond_price: 0, 
+   r: "", 
+   SpecArr: [50, 20, 50, 20, 16, 10, 4], 
+   PriceArr: [1350, 550, 1350, 630, 530, 450, 280] 
+}; 
+</script>
+
+	<link rel="stylesheet" href="./style3.0.css">
+	<link rel="stylesheet" href="./btn.css">
+	<script src="./inputdate.js.下載"></script>
+	<script language="javascript" type="text/javascript" src="./calender.js.下載"></script>
+	<script src="./js"></script>
+	<script>
+    	var CID             = "1";
+    	var power			= "1";
+    	var customer_id		= "86000";
+    	var cuName			= "%u88D5%u548C%u8208-%u91D1%u767E%u5229";
+    	var cuAddr			= "%u4E2D%u58E2%u5340%u5F8C%u5BEE%u4E00%u8DEF293%u865F%u203B%u8907%u5408%u6876%uFF0C%u9F8D%u660C%u8DEF190%u5DF791%u865F%28%u9001%u4E00%u822C%29";
+    	var address			= "中壢區測試路1號※複合桶，範例街2號(送一般)";
+    	var customerSet 	= "none";
+    	var lat				= "0";
+    	var lng				= "0";
+		var appRoot			= "/gas_station/";
+		
+		var openWin = function(program) {
+			if (program === "opay") {
+				oWin(appRoot + 'customer/money_form.asp?customer_id=' + customer_id, 'opay',  1050, 600, 0, 0);
+			}
+			if (program === "mpay") {
+				oWin(appRoot + 'month/month.asp?xbtn=charge&customer_id=' + customer_id, 'mpay', 1300, 700, 0, 0);
+			}
+			if (program === "meater") {
+				oWin(appRoot + 'customer/meater.asp?xbtn=charge&customer_id=' + customer_id, 'meater_', 1120, 600, 0, 0);
+			}
+			if (program === "maintain") {
+				oWin('maintain.asp?customer_id='+ customer_id +'&customer_address='+ cuAddr +'&customer_name='+ cuName, 'maintain', 1000, 800, 0, 0);
+			}
+			if (program === "stock_barcode") {
+				oWin(appRoot + 'barcode/stock_barcode.asp?customer_id=' + customer_id, 'balist', 1000, 800, 0, 0);
+			}
+			if (program === "small_window") {
+				oWin(appRoot + 'other/small_window_new.asp?xbtn=empty&customer_id=' + customer_id, 'small', 365, 300, 20, 150);
+			}
+			if (program === "customer") {
+				location.href = appRoot + 'customer/customer.asp?xbtn=' + escape('查詢資料') + '&customer_id=' + customer_id;
+			}
+		}
+		
+		// submit
+		$(function() {
+			$('#subDiv').click(function() {
+				$('#xbtn').attr('disabled', 'disabled');
+				$('#form1').submit();
+			});
+		});
+	</script>
+	
+	<script src="./order_form.js.下載"></script>
+	
+	<style>
+    	.div {
+    		background-color: #fafafa;
+    		border: 1px dashed #336699;
+    		padding: 10px;
+    	//	height: 70px;
+    		width: 800px;
+    		position: absolute;
+    		margin: 85px 30px;
+    		float: left;
+    		box-shadow: 1px 1px 7px -3px #000;-moz-box-shadow: 1px 1px 7px -3px #000;-webkit-box-shadow: 1px 1px 7px -3px #000;
+    	}
+	</style>
+
+	<form id="form1" method="post" name="form1" action="http://www.easy88.com.tw:20040/gas_station/order/save_gas_order.asp" onsubmit="return checkdata()"><!-- onkeypress="return runScript(event)"-->
+	<input type="hidden" name="customer_id" value="86000" autocomplete="off">
+	<input type="hidden" name="target_location" value="all" autocomplete="off">
+	<input type="hidden" name="pay_way" value="現金" autocomplete="off">
+	<input type="hidden" name="tel_id" value="" autocomplete="off">
+	<input type="hidden" name="customer" value="0" autocomplete="off">
+    <input type="hidden" id="refond_money" name="refond_money" value="" autocomplete="off">
+    <input type="hidden" id="p_re" name="p_re" value="27.5" autocomplete="off">
+	<input type="hidden" name="service" value="購買" autocomplete="off">
+	<input type="hidden" name="xbtn" value="輸入訂單" autocomplete="off">
+	<input type="hidden" name="lat" value="" autocomplete="off">
+	<input type="hidden" name="lng" value="" autocomplete="off">
+		
+	
+			<div id="listDiv" class="div" style="display: none;">
+				<table border="1" width="100%">
+				<tbody><tr>
+					<td colspan="8">出桶鋼瓶超過 360 天</td>
+					<td colspan="2" align="right"><input type="button" value="關閉" onclick="$('#listDiv').hide();" autocomplete="off"></td>
+				</tr>
+				<tr align="center">
+					<td>no</td>
+					<td>編號</td>
+					<td>條碼</td>
+					<td>規格</td>
+					<td>下次檢驗</td>
+					<td>桶齡</td>
+					<td>司機</td>
+					<td>日期</td>
+					<td>時間</td>
+					<td>天數</td>
+				</tr>
+				
+				<tr align="center">
+					<td>1</td>
+					<td>15960</td>
+					<td>AW05113650</td>
+					<td>16kg</td>
+					<td><font color="red">114-06-21</font></td>
+					<td>27</td>
+					<td>師傅丙</td>
+					<td>2024/12/06</td>
+					<td>15:16:28</td>
+					<td>700</td>
+				</tr>
+				
+				<tr align="center">
+					<td>2</td>
+					<td>18802</td>
+					<td>CC10196785</td>
+					<td>20kg</td>
+					<td><font color="red">115-03-22</font></td>
+					<td>5</td>
+					<td>師傅丙</td>
+					<td>2024/12/06</td>
+					<td>15:16:23</td>
+					<td>700</td>
+				</tr>
+				
+				<tr align="center">
+					<td>3</td>
+					<td>16566</td>
+					<td>CE10105143</td>
+					<td>20kg</td>
+					<td><font color="red">116-02-21</font></td>
+					<td>4</td>
+					<td>師傅丙</td>
+					<td>2024/11/02</td>
+					<td>15:08:35</td>
+					<td>734</td>
+				</tr>
+				
+				<tr align="center">
+					<td>4</td>
+					<td>17711</td>
+					<td>AV05052417</td>
+					<td>16kg</td>
+					<td><font color="red">116-01-07</font></td>
+					<td>15</td>
+					<td>師傅丙</td>
+					<td>2024/05/07</td>
+					<td>12:40:51</td>
+					<td>913</td>
+				</tr>
+				
+				</tbody></table>
+				<font size="2">視窗5秒後自動關閉</font>
+				<script>setTimeout("$('#listDiv').hide();",5000)</script>
+			</div>
+		
+	
+	<center>
+		
+	
+	
+	<table cellspacing="0" cellpadding="10" width="100%" align="center" border="0" id="GasForm" onkeydown="keyDown(event)">
+	<tbody><tr>
+		<td class="bodyline">
+			
+		<center><font size="6" color="red"></font></center>
+		
+		<table border="1" width="100%" bordercolor="#b8d0dc" cellspacing="1">
+		<tbody><tr bgcolor="#BBDDFF">
+			<td colspan="8" align="center">
+				<table width="100%">
+					<tbody><tr>
+						<td width="20%" align="center">
+							<table width="100%">
+								<tbody><tr align="center">
+									<td width="40%" nowrap="">
+										&nbsp;
+									</td>
+									<td nowrap="">
+										<input type="button" value="流量表" onclick="openWin('meater')" autocomplete="off">
+
+									</td>
+								</tr>
+							</tbody></table>
+						</td>
+						<td width="15%" align="center">
+							<a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="openWin('maintain')"><font size="4" color="blue"><b>維修作業</b></font></a>
+						</td>
+						
+							<td width="30%" align="center"><font size="5"><b>訂 單 輸 入 表</b></font><font size="5" color="red"><b>【該客戶未處理地址】</b></font></td>
+						
+						<td width="15%" align="center">
+							<a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="openWin('stock_barcode')"><font size="4" color="blue"><b>鋼瓶條碼</b></font></a>
+						</td>
+						<td width="20%" align="center">
+							<table width="100%">
+								<tbody><tr align="center">
+									<td>
+										&nbsp;
+									</td>
+									<td width="40%">
+										<a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="openWin('small_window')"><font size="4" color="blue">空白送貨單</font></a>&nbsp;
+									</td>
+								</tr>
+							</tbody></table>
+						</td>
+					</tr>
+				</tbody></table>
+			</td>
+		</tr>
+		
+		
+        <tr>
+	        <td align="center" nowrap=""><font size="4"><b>客戶編號</b></font></td>
+			<td align="center" width="13.2857142857143%" onclick="openWin('customer')" class="touch"><font size="4"><b>86000</b></font></td>
+			<td align="center" width="13.2857142857143%"><font size="4"><b>客戶名稱</b></font></td>
+			<td align="center" width="13.2857142857143%" onclick="openWin('customer')" class="touch">
+				<font size="4" color="blue"><b>測試客戶甲</b></font>
+			</td>
+			<td align="center" width="13.2857142857143%"><font size="4"><b>統一發票</b></font></td>
+			<td align="center" width="13.2857142857143%" bgcolor="#FFFFFF"><font size="4"><b>無須發票</b></font></td>
+			<td align="center" width="13.2857142857143%"><font size="4"><b>統一編號</b></font></td>
+			<td align="center" width="13.2857142857143%"><font size="4"><b>&nbsp;</b></font></td>
+		</tr>
+		
+		<tr>
+			<td align="center">
+				<b>
+				
+					<a herf="#" onclick="oWin('/gas_station/customer/Jmap.asp?c_id=86000', 'map', 800, 600, 200, 230)" class="touch"><font size="4">客戶住址</font></a>
+				
+				</b>
+			</td>
+			<td colspan="3"><font color="blue" size="5">中壢區測試路1號※複合桶，範例街2號(送一般)</font></td>
+			
+			
+				<td align="center"><font size="4"><b>客戶電話</b></font></td>
+				<td colspan="2" align="center"><font size="5"><b>0912000111</b></font></td>
+			
+			<td align="center"><font color="blue" size="4"><b>每公斤單價</b></font></td>
+		</tr>
+		
+		<tr>
+			<td align="center"><font size="4"><b>瓦斯桶別</b></font></td>
+			<td align="center"><font size="4" color="blue">&nbsp;<b></b></font></td>
+			<td align="center"><font size="4" color="blue"><b></b></font></td>
+			
+			
+				<td align="center"><font color="red" size="4"><b>注意事項</b></font></td>
+				<td colspan="3" align="center">&nbsp;<font color="red" size="4">&nbsp;@8+，目前無寄桶，樓層2樓30.3樓50</font></td>
+			
+			<td align="center"><font size="4"><b>0</b></font></td>
+		</tr>
+		
+		<tr>
+			<td align="center"><font size="4"><b>規　　格</b></font></td>
+			<td align="center"><font size="4"><b>50丙</b></font></td>
+			<td align="center"><font size="4"><b>20丙</b></font></td>
+			<td align="center"><font size="4"><b>50kg</b></font></td>
+
+			<td align="center"><font size="4"><b>20kg</b></font></td>
+			<td align="center"><font size="4"><b>16kg</b></font></td>
+			<td align="center"><font size="4"><b>10kg</b></font></td>
+
+			<td align="center"><font size="4"><b>4kg</b></font></td>
+			
+		</tr>
+		
+		
+		<tr>
+			<td align="center"><font size="4"><b>欠桶數量</b></font></td>
+			<td>&nbsp;</td>
+<td>&nbsp;</td>
+
+			<td align="center"><font color="red" size="4"><b>&nbsp;</b></font></td>
+			<td align="center"><font color="red" size="4"><b>&nbsp;</b></font></td>
+			
+			<td align="center"><font color="red" size="4"><b>-2</b></font></td>
+			<td align="center"><font color="red" size="4"><b>&nbsp;</b></font></td>
+			
+			<td align="center"><font color="red" size="4"><b>&nbsp;</b></font></td>
+			
+		</tr>
+		
+		
+		<tr>
+			<td align="center"><font color="blue" size="4"><b>累計購買</b></font></td>
+			<td align="center"><font color="blue" size="4"><b><span id="T50">&nbsp;</span></b></font></td>
+			<td align="center"><font color="blue" size="4"><b><span id="T20">&nbsp;</span></b></font></td>
+			<td align="center"><font color="blue" size="4"><b><span id="T18">&nbsp;</span></b></font></td>
+
+			<td align="center"><font color="blue" size="4"><b><span id="T16">38</span></b></font></td>
+			<td align="center"><font color="blue" size="4"><b><span id="T10">24</span></b></font></td>
+			<td align="center"><font color="blue" size="4"><b><span id="Tn4">&nbsp;</span></b></font></td>
+
+			<td align="center"><font color="blue" size="4"><b><span id="T4">&nbsp;</span></b></font></td>
+			
+		</tr>
+	
+	<tr>
+    <td align="center"><font size="4"><b>銷售價格</b></font></td>
+	<td align="center"><input type="text" id="price_50kg" name="price_50kg" size="6" value="" class="cPrice" onblur="ckNaN('price_50kg','');" autocomplete="off"></td>
+	<td align="center"><input type="text" id="price_20kg" name="price_20kg" size="6" value="" class="cPrice" onblur="ckNaN('price_20kg','');" autocomplete="off"></td>
+<td align="center">
+<input type="text" id="price_18kg" name="price_18kg" size="6" value="" class="cPrice" onblur="ckNaN('price_18kg','');" autocomplete="off">
+</td>
+
+	<td align="center">
+    	<input type="text" id="price_16kg" name="price_16kg" size="6" value="770" class="cPrice" onblur="ckNaN('price_16kg','770');" autocomplete="off">
+    </td>
+	<td align="center">
+    	<input type="text" id="price_10kg" name="price_10kg" size="6" value="660" class="cPrice" onblur="ckNaN('price_10kg','660');" autocomplete="off">
+    </td>
+<td align="center">
+<input type="text" id="price_new_4kg" name="price_new_4kg" size="6" value="" class="cPrice" onblur="ckNaN('price_new_4kg','');" autocomplete="off">
+</td>
+
+	<td align="center">
+    	<input type="text" id="price_4kg" name="price_4kg" size="6" value="240" class="cPrice" onblur="ckNaN('price_4kg','240');" autocomplete="off">
+    </td>
+
+		</tr><tr>
+    		<td align="center"><font size="4"><b>訂購數量</b></font></td>
+    		
+			<td align="center">
+    			<script>jsNumOpt(8, "oder_50kg", "請選擇");</script><select id="jsOpt_oder_50kg" onchange="$(&quot;#oder_50kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+				<input type="text" id="oder_50kg" name="oder_50kg" size="2" value="" onblur="ckNaN('oder_50kg');" class="oder spec1" autocomplete="off">
+			</td>
+			
+			<td align="center">
+				<script>jsNumOpt(8, "oder_20kg", "請選擇");</script><select id="jsOpt_oder_20kg" onchange="$(&quot;#oder_20kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+				<input type="text" id="oder_20kg" name="oder_20kg" size="2" value="" onblur="ckNaN('oder_20kg');" class="oder spec2" autocomplete="off">
+			</td>
+			
+            
+    			<td align="center">
+    				<script>jsNumOpt(8, "oder_18kg", "請選擇");</script><select id="jsOpt_oder_18kg" onchange="$(&quot;#oder_18kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+    				<input type="text" id="oder_18kg" name="oder_18kg" size="2" value="" onblur="ckNaN('oder_18kg');" class="oder spec3" autocomplete="off">
+    			</td>
+    		
+            
+			<td align="center">
+				<script>jsNumOpt(8, "oder_16kg", "請選擇");</script><select id="jsOpt_oder_16kg" onchange="$(&quot;#oder_16kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+				<input type="text" id="oder_16kg" name="oder_16kg" size="2" value="" onblur="ckNaN('oder_16kg');" class="oder spec4" autocomplete="off">
+			</td>
+			
+			<td align="center">
+				<script>jsNumOpt(8, "oder_10kg", "請選擇");</script><select id="jsOpt_oder_10kg" onchange="$(&quot;#oder_10kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+				<input type="text" id="oder_10kg" name="oder_10kg" size="2" value="" onblur="ckNaN('oder_10kg');" class="oder spec5" autocomplete="off">
+			</td>
+			
+            
+    			<td align="center">
+    				<script>jsNumOpt(8, "oder_new_4kg", "請選擇");</script><select id="jsOpt_oder_new_4kg" onchange="$(&quot;#oder_new_4kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+    				<input type="text" id="oder_new_4kg" name="oder_new_4kg" size="2" value="" onblur="ckNaN('oder_new_4kg');" class="oder spec6" autocomplete="off">
+    			</td>
+    		
+            
+			<td align="center">
+				<script>jsNumOpt(8, "oder_4kg", "請選擇");</script><select id="jsOpt_oder_4kg" onchange="$(&quot;#oder_4kg&quot;).val(this.value);this.selectedIndex=0;oderCount();"><option value="">請選擇</option><option value="1">1 桶</option><option value="2">2 桶</option><option value="3">3 桶</option><option value="4">4 桶</option><option value="5">5 桶</option><option value="6">6 桶</option><option value="7">7 桶</option><option value="8">8 桶</option></select>&nbsp;
+				<input type="text" id="oder_4kg" name="oder_4kg" size="2" value="" onblur="ckNaN('oder_4kg');" class="oder spec7" autocomplete="off">
+			</td>
+
+		</tr><tr>
+			<td align="center"><font color="blue" size="4"><b>其他服務</b></font></td>
+			<td align="center" colspan="2">
+				<select id="product" name="product"><option value="">請選擇</option><option value="瓦斯爐">瓦斯爐</option><option value="快速爐">快速爐</option><option value="其他">其他</option><option value="移機">移機</option><option value="單口爐">單口爐</option><option value="電鍋">電鍋</option><option value="管線">管線</option><option value="熱水器">熱水器</option><option value="調整器">調整器</option><option value="檢測費">檢測費</option></select>&nbsp;&nbsp;
+				<select id="modle" name="modle"><option value="">請選擇</option></select>
+
+				自填 <input type="text" name="x_product" size="6" autocomplete="off"></td>
+			
+			<td align="center"><font size="4"><b>數量</b> <input type="text" id="quantity" name="quantity" size="4" value="1" onblur="ckNaN('quantity');" autocomplete="off"></font></td>
+			<td align="center"><font size="4"><b>單價</b>&nbsp;&nbsp;<input type="text" id="price" name="price" size="6" value="" onblur="ckNaN('price');" autocomplete="off"></font></td>
+			<td align="center"><font size="4"><b>送貨人員</b></font></td>
+			<td align="center">
+				
+				
+				<select name="deliver">
+					<!-- Get Application Cache (deliver_option_1_) -->
+<!-- Get Application Cache (deliver_option_1_) -->
+<!-- Use Cache -->
+<option value="稍後輸入">稍後輸入</option><option value="捷程測試">捷程測試</option>
+<option value="師傅戊">師傅戊</option>
+<option value="師傅丙">師傅丙</option>
+<option value="師傅丁">師傅丁</option>
+<option value="師傅甲">師傅甲</option>
+<option value="邱坤櫳">邱坤櫳</option>
+<option value="師傅乙">師傅乙</option>
+
+				</select>
+				<input type="checkbox" name="order_deliver" title="記住" value="T" onclick="cchk(this.checked)" autocomplete="off"><font size="1" color="green">記住</font>
+			</td>
+			
+		</tr>
+		<script>
+			function cchk(tmpchk){
+				if(!tmpchk){$("select[name=deliver]").val("");}
+			}
+		</script>
+
+	<tr>
+		<td align="center"><a href="javascript:show_calendar('form1.deliver_date')"><font size="3" color="blue"><b>銷貨日期</b></font></a></td>
+		<td align="center"><input type="text" name="deliver_date" id="deliver_date" size="10" value="2026/11/06" class="showPopDate" autocomplete="off">
+		</td><td align="center">
+			
+		</td>
+		<td align="center">
+			<b><font color="red" size="4">存氣 </font><font size="4" color="blue">0 kg</font></b>
+		</td>
+		<td align="center" colspan="2">
+			<select name="berrel">
+				<option>售鋼瓶</option>
+				<option value="A">50kg桶</option>
+				<option value="B">20kg桶</option>
+				<option value="C">16kg桶</option>
+				<option value="D">10kg桶</option>
+				<option value="E">4kg桶</option>
+			</select>　　
+			桶數
+			<select name="berrel_quantity">
+				
+					<option value="1">1桶</option>
+				
+					<option value="2">2桶</option>
+				
+					<option value="3">3桶</option>
+				
+					<option value="4">4桶</option>
+				
+					<option value="5">5桶</option>
+				
+					<option value="6">6桶</option>
+				
+					<option value="7">7桶</option>
+				
+					<option value="8">8桶</option>
+				
+					<option value="9">9桶</option>
+				
+					<option value="10">10桶</option>
+				
+					<option value="11">11桶</option>
+				
+					<option value="12">12桶</option>
+				
+					<option value="13">13桶</option>
+				
+					<option value="14">14桶</option>
+				
+					<option value="15">15桶</option>
+				
+					<option value="16">16桶</option>
+				
+					<option value="17">17桶</option>
+				
+					<option value="18">18桶</option>
+				
+					<option value="19">19桶</option>
+				
+					<option value="20">20桶</option>
+				
+			</select>&nbsp;
+			<!--<input type="text" id="berrel_quantitytxt" name="berrel_quantitytxt" style="width:45px;" onblur="ckNaN('berrel_quantitytxt');">-->
+		</td>
+
+	
+		
+			<td align="center">
+				<!--<input type="radio" name="call_from" value="C"><b>來電</b>　<input type="radio" name="call_from" value="D"><b>司機</b>-->&nbsp;
+			</td>
+			<td align="center"><div id="subDiv"><input id="xbtn" type="submit" value="輸入訂單" autocomplete="off"></div></td>
+		</tr>
+		<tr>
+			<td align="center">
+				<a href="javascript:" onclick="oWin('order_memo.asp', 'order_memo', 800, 300, 100, 200)"><font size="4"><b>訂單備註</b></font></a>
+			</td>
+			<td colspan="2">
+				<select name="order_memo" id="order_memo" onchange="$('#oder_remarks').val(this.value);$('#order_memo').val('');">
+					<!-- Set Application Cache (option_cache_order_memo_1_) -->
+<!-- Load DB -->
+<option value="">快速輸入</option>
+				</select>
+				<input type="text" name="oder_remarks" id="oder_remarks" size="30" autocomplete="off">
+			</td>
+
+			
+				<td colspan="3">&nbsp;</td>
+			
+				<td align="center">
+					<a href="javascript:" onclick="oWin('ap_time.asp', 'ap_time', 650, 300, 100, 200)"><font color="blue">預約</font></a>&nbsp;
+					<select name="ap_time">
+						<option>均可</option>
+						<!-- Set Application Cache (option_cache_ap_time_1_) -->
+<!-- Load DB -->
+
+					</select>
+				</td>
+			
+			<td align="center"><b>樓層費</b>&nbsp;<input type="text" id="floor" name="floor" size="4" onblur="ckNaN('floor');" autocomplete="off"></td>
+		</tr>
+
+	
+	
+		<tr>
+			<td align="center">
+				<strong>
+					<a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="oWin('reason.asp', 'MaintMemo', 600, 600, 100, 200)">維修原因</a>
+				</strong>
+			</td>
+			<td colspan="3">
+				<select id="maint_memo" onchange="$('#maint_remarks').val(this.value);$('#maint_memo').val('');">
+				<!-- Set Application Cache (option_cache_maintain_reason_option__1_) -->
+<!-- Load DB -->
+<option value="">請選維修原因</option>
+				</select>
+				<input type="text" name="maint_remarks" id="maint_remarks" size="30" autocomplete="off">
+			</td>
+			<td align="center">
+				<input name="maint_music" type="checkbox" id="maint_music" value="T" checked="checked" autocomplete="off"> 通報司機維修
+			</td>
+			<td align="center">
+				退存氣 <input name="refond_kg" id="refond_kg" type="text" size="4" class="oder" onblur="ckNaN('refond_kg');" autocomplete="off"> 公斤
+			</td>
+			
+			
+			<td align="center" colspan="2">
+				<strong>瓦斯金額</strong> <input name="oder_price" id="oder_price" type="text" size="6" onblur="ckNaN('oder_price');" autocomplete="off">
+			</td>
+			
+					
+        </tr>
+
+	
+	</tbody></table>
+	
+	
+
+
+	<br><br>
+	<div id="gas_history_record" width="100%" height="300px" align="center">
+
+
+	<script src="./utils.js.下載"></script>
+
+	<script>
+		var customer_id = "86000";
+		var strNo = "";
+		var sdate = "";
+		var edate = "";
+		function goprint(){
+			strNo = "";
+			$('input:checkbox:checked[name="oder_no"]').each(function(){
+				if(strNo != "") strNo += "," ;
+				strNo += $(this).val() ;
+			});
+			
+			sdate = $("#sdate").val();
+			edate = $("#edate").val();
+
+			window.open("print_gas_history_record.asp?customer_id="+ customer_id +"&sdate="+ sdate +"&edate="+ edate +"&oder_no="+ strNo +"&2026/11/6 下午 11:14:44","print");
+		}
+
+/*		
+		$(function(){
+			$('input[type=checkbox]').change(function(){
+				strNo = "";
+				$('input:checkbox:checked[name="oder_no"]').each(function(){
+					if (this.checked) {
+						if(strNo != "") strNo += "," ;
+						strNo += $(this).val() ;
+					} 
+				});
+			});
+		});
+*/
+	</script>
+	<form method="post" name="recordgas" action="http://www.easy88.com.tw:20040/gas_station/order/print_gas_history_record.asp">
+	<input type="hidden" name="target" value="0912000111">
+	<input type="hidden" name="customer_id" value="86000">
+	<table width="100%" border="1" align="center" bordercolor="#b8d0dc" cellspacing="0">
+	<tbody><tr bgcolor="#BBDDFF">
+		
+		<td align="center" colspan="16">
+		<table width="100%">
+		<tbody><tr>
+			<td align="center">
+				銷貨日期&nbsp;
+				<a href="javascript:show_calendar('recordgas.sdate')"><font size="3" color="blue"><b>起</b></font></a>&nbsp;
+				<input type="text" id="sdate" name="sdate" size="10" value="2026/11/01" class="showPopDate">&nbsp;
+				<a href="javascript:show_calendar('recordgas.edate')"><font size="3" color="blue"><b>迄</b></font></a>&nbsp;
+				<input type="text" id="edate" name="edate" size="10" value="2026/11/06" class="showPopDate">&nbsp;
+				<input type="button" name="xbtn" value="列印交易明細" onclick="goprint();">
+			</td>
+
+				<td width="17%"><font size="4"><b>今年單價 : </b></font></td>
+				<td width="17%"><font size="4"><b>去年單價 : </b></font></td>
+				<td width="17%"><font size="4"><b>今年折讓 : </b></font></td>
+				<td width="17%"><font size="4"><b>去年折讓 : </b></font></td>
+
+		</tr>
+		</tbody></table>
+		</td></tr>
+	<tr><td align="center"><font size="4">送貨日期</font></td>
+		<td align="center"><font size="4">叫貨時間</font></td>
+		<td align="center"><font size="4">50丙</font></td>
+		<td align="center"><font size="4">20丙</font></td>
+<td align="center"><font size="4">50kg</font></td>
+		<td align="center"><font size="4">20kg</font></td>
+		<td align="center"><font size="4">16kg</font></td>
+<td align="center"><font size="4">10kg</font></td>
+		<td align="center"><font size="4">4kg</font></td>
+		<td align="center"><font size="4">存氣</font></td>
+		<td align="center"><font size="4">金額</font></td>
+		<!--<td align=center><font size=4>已付</td>-->
+		<td align="center"><font size="4">鋼瓶</font></td>
+		<td align="center"><font size="4">是否付款</font></td>
+		<td align="center"><font size="4">送貨員</font></td>
+		
+		<td align="center"><font size="4">位置</font></td>
+		<td align="center"><font size="4">備註</font></td>
+		
+	</tr>
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2351631"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2351631','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/10/21</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2351631','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">15:29:31</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (770)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">770</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2351631&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 測試路1號,一般桶就可</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2349134"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2349134','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/09/21</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2349134','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">17:39:01</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (770)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">770</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2349134&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅乙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 範例街2號(送一般),不急</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2348191"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2348191','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/09/10</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2348191','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">16:46:13</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (770)</font></td>
+				<td align="center"><font size="4">1 (660)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1430</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2348191&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 測試路1號   樓層2樓30.3樓50</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2341443"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2341443','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/06/16</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2341443','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">13:20:42</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">1 (645)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1395</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4"><font color="red">寄桶</font></font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2341443&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 送測試路，送一般桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2339951"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2339951','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/05/29</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2339951','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">14:47:53</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">750</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2339951&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅乙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 送測試路，沒複合桶就送一般</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2338571"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2338571','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/05/12</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2338571','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">18:42:00</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">750</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2338571&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 範例街2號(送一般)</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2336907"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2336907','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/04/24</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2336907','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">15:01:48</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">1 (645)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1395</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2336907&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 送測試路，送一般桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2334407"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2334407','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/03/28</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2334407','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:13:14</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">750</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4"><font color="red">寄桶</font></font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2334407&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 送測試路(一般桶也可以)</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2334336"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2334336','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/03/27</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2334336','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">14:24:08</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (750)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">750</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2334336&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丁</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 範例街2號</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2331344"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2331344','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/02/27</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2331344','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">17:47:47</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (750)</font></td>
+				<td align="center"><font size="4">1 (645)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">2145</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2331344&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅乙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 20*1、16*1送測試路，20*1送範例街(複合桶)</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2328562"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2328562','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/02/03</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2328562','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">15:36:17</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (750)</font></td>
+				<td align="center"><font size="4">1 (645)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">2145</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2328562&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅乙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 儒。複合桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2325069"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2325069','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2026/01/03</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2325069','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">13:51:34</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (750)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1500</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2325069&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 複合桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2321294"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2321294','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/11/29</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2321294','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">15:36:17</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (690)</font></td>
+				<td align="center"><font size="4">1 (600)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1980</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2321294&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅甲</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2314551"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2314551','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/09/16</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2314551','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">16:26:06</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">2 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1860</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2314551&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2308354"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2308354','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/06/30</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2308354','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">11:56:55</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (680)</font></td>
+				<td align="center"><font size="4">1 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1950</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2308354&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 20*1複合桶還客人，收20*1空桶16*1空桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2301437"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2301437','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/04/16</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2301437','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">09:55:15</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (680)</font></td>
+				<td align="center"><font size="4">1 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1950</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2301437&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 中午前到，可以先送一般桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2298391"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2298391','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/03/18</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2298391','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">16:37:13</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">1 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1270</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4"><font color="blue">還桶</font></font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2298391&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅戊</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 多收20*1複合桶(下次叫瓦斯要還)。 </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2294668"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2294668','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/02/15</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2294668','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">13:43:45</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">680</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2294668&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 複合桶，去之前聯繫客人</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2294659"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2294659','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/02/14</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2294659','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:57:03</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">680</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2294659&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 複合桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2291879"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2291879','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2025/01/22</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2291879','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:42:44</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">2 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1860</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2291879&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 先送16過去順便拿空的複合桶回來灌，灌好再送</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2288501"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2288501','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/12/27</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2288501','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">14:24:03</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">2 (680)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1360</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2288501&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 20的送複合桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2285932"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2285932','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/12/06</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2285932','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">15:00:54</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">2 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1860</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4"><font color="red">欠桶</font></font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2285932&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 回店裡拿到複合桶再送，不急，此次有一隻16是寄桶取回的</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2282470"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2282470','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/11/02</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2282470','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">14:24:23</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (680)</font></td>
+				<td align="center"><font size="4">1 (590)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1270</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2282470&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 20的送複合桶,16送鋼瓶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2278050"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2278050','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/09/14</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2278050','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">11:46:00</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (660)</font></td>
+				<td align="center"><font size="4">1 (570)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1230</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2278050&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅己</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 20的送複合桶,16送鋼瓶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2270312"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2270312','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/06/12</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2270312','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:08:41</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (660)</font></td>
+				<td align="center"><font size="4">1 (570)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1230</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2270312&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 回店裡拿到複合桶再送，不急</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2266780"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2266780','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/05/07</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2266780','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:25:44</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (660)</font></td>
+				<td align="center"><font size="4">1 (570)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1230</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2266780&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 要送玻璃纖維桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2259894"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2259894','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/03/05</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2259894','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">11:28:56</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (640)</font></td>
+				<td align="center"><font size="4">1 (550)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1190</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2259894&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2256081"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2256081','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2024/02/03</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2256081','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:02:07</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (640)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">640</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2256081&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 回店裡拿到複合桶再送，不急</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2251092"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2251092','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2023/12/27</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2251092','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">17:52:39</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (640)</font></td>
+				<td align="center"><font size="4">1 (550)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1190</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2251092&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2248181"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2248181','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2023/12/04</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2248181','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:43:30</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (640)</font></td>
+				<td align="center"><font size="4">1 (550)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">1190</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2248181&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2242995"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2242995','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2023/10/16</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2242995','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">13:41:12</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">1 (550)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">550</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2242995&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅戊</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 送二樓 樓層30</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2239987"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2239987','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2023/09/13</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2239987','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">08:30:32</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">1 (635)</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">635</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2239987&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丙</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> 去之前打電話 要給玻璃纖維桶</font></td>
+				
+			</tr>
+
+
+			<tr><td align="center"><input type="checkbox" name="oder_no" value="2239921"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('order_detail.asp?oder_id=2239921','New', 'width=560,height=400,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">2023/09/12</font></a></td>
+				<td align="center">
+					<font size="4">
+					 
+						<a href="javascript:;" onclick="window.open('/gas_station/barcode/order_barcode.asp?start=T&amp;oder_id=2239921','New','width=600,height=600,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=yes,top=50,left=50')">12:00:02</a>
+					
+					&nbsp;</font>
+				</td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">1 (550)</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font size="4">0</font></td>
+				<td align="center">
+					<font size="4">550</font>
+					
+				</td>
+				
+				<!--<td align=center><font size=4>0</td>-->
+				<td align="center"><font size="4">&nbsp;</font></td>
+				<td align="center"><font color="000000" size="4"> 
+				
+				已付款</font></td>
+				<td align="center"><font size="4"><a href="http://www.easy88.com.tw:20040/gas_station/order/order_form.asp?xbtn=oder&amp;customer_id=86000&amp;caller=T#" onclick="window.open('memo.asp?oder_id=2239921&amp;customer_id=86000','New', 'width=400,height=200,menubar=no,toolbar=no,location=no,directories=no,status=no,resizable=yes,scrollbars=no,top=20,left=150')"><font size="4" color="blue">師傅丁</font></a></font></td>
+				<!-- 位置 -->
+				<td align="center"><font size="4"></font></td>
+
+				
+				<td align="center"><font size="4"> </font></td>
+				
+			</tr>
+
+
+	<tr bgcolor="#BBDDFF" id="payedtr" style="display:none">
+		<td colspan="15">
+			<input type="hidden" id="new_payed">
+			<input type="hidden" id="oder_id">
+			付款金額&nbsp;&nbsp;&nbsp;<input type="text" id="paypmoney" size="8">&nbsp;&nbsp;&nbsp;&nbsp;
+			<a href="javascript:show_calendar('recordgas.paypdate')"><font size="3" color="blue"><b>付款日期</b></font></a>&nbsp;&nbsp;&nbsp;
+			<input type="text" id="paypdate" size="10" readonly="">&nbsp;&nbsp;&nbsp;&nbsp;
+			收款人員&nbsp;&nbsp;&nbsp;
+				<select id="paydeliver">
+				<!-- Get Application Cache (deliver_option_1_) -->
+<!-- Get Application Cache (deliver_option_1_) -->
+<!-- Use Cache -->
+<option value="捷程測試">捷程測試</option>
+<option value="師傅戊">師傅戊</option>
+<option value="師傅丙">師傅丙</option>
+<option value="師傅丁">師傅丁</option>
+<option value="師傅甲">師傅甲</option>
+<option value="邱坤櫳">邱坤櫳</option>
+<option value="師傅乙">師傅乙</option>
+
+				</select>&nbsp;&nbsp;&nbsp;&nbsp;
+			<input type="button" value="確認修改" onclick="paychangeE();">
+		</td>
+	</tr>
+	</tbody></table>
+	</form>
+<script>
+	function paychangeE(){
+		var new_payed = $("#new_payed").val();
+		var oder_id = $("#oder_id").val();
+		var pmoney = $("#paypmoney").val();
+		var pdate = $("#paypdate").val();
+		var deliver = $("#paydeliver").val();
+		var errmsg = "";
+		
+		if (pmoney=="") { errmsg += "未輸入付款金額\n"; }
+		if (pdate=="") { errmsg += "未輸入付款日期\n"; }
+		if (errmsg != ""){
+			alert(errmsg);
+			return false;
+		}
+		else{
+			$.ajax({
+				cache:false,
+				type:"GET",
+				url:"transpay.asp",
+				data:"new_payed="+new_payed+"&oder_id="+oder_id+"&pmoney="+pmoney+"&pdate="+pdate+"&deliver="+escape(deliver)+"&",
+				success:function(html){
+					gas_record(1,'');
+				}
+			});
+		}
+	}
+	
+	function paychange(new_payed, oder_id){
+		$("#payedtr").hide();
+		if(new_payed=="X"||new_payed=="MX"){
+	//	if(new_payed=="MX"){
+			$("#payedtr").show();
+			$("#new_payed").val(new_payed);
+			$("#oder_id").val(oder_id);
+		}
+		else{
+			$.ajax({
+				cache:false,
+				type:"GET",
+				url:"transpay.asp",
+				data:"new_payed="+new_payed+"&oder_id="+oder_id+"&",
+				success:function(html){
+					gas_record(1,'');
+				}
+			});
+		}
+	}
+
+	function planchange(tmpcheck, tmpid){
+		var planoder = "F";
+		if(tmpcheck==true) planoder = "T";
+		$.ajax({
+			cache:false,
+			type:"GET",
+			url:"transpay.asp",
+			data:"new_payed=U&oder_id="+tmpid+"&planoder="+planoder+"&",
+			success:function(html){
+			//	只是做欄位更新,不用再重整資料呈現
+			//	gas_record(1,'');
+			}
+		});
+	}
+</script>
+<br></div>
+	<div id="machine_history_record" width="100%" height="300px" align="center">
+
+<script>
+	function paystovechangeE(){
+		var new_payed = $("#new_payed_s").val();
+		var oder_id = $("#oder_id_s").val();
+		var pmoney = $("#paypmoney_s").val();
+		var pdate = $("#paypdate_s").val();
+		var deliver = $("#paydeliver_s").val();
+		var errmsg = "";
+		
+		if (pmoney=="") { errmsg += "未輸入付款金額\n"; }
+		if (pdate=="") { errmsg += "未輸入付款日期\n"; }
+		if (errmsg != ""){
+			alert(errmsg);
+			return false;
+		}
+		else{
+			$.ajax({
+				cache:false,
+				type:"GET",
+				url:"transstovepay.asp",
+				data:"new_payed="+new_payed+"&oder_id="+oder_id+"&pmoney="+pmoney+"&pdate="+pdate+"&deliver="+escape(deliver)+"&",
+				success:function(html){
+					stove_record();
+				}
+			});
+		}
+	}
+	
+	function paystovechange(new_payed, oder_id){
+		$("#payedtr_s").hide();
+		if(new_payed=="X"||new_payed=="MX"){
+	//	if(new_payed=="MX"){
+			$("#payedtr_s").show();
+			$("#new_payed_s").val(new_payed);
+			$("#oder_id_s").val(oder_id);
+		}
+		else{
+			$.ajax({
+				cache:false,
+				type:"GET",
+				url:"transstovepay.asp",
+				data:"new_payed="+new_payed+"&oder_id="+oder_id+"&",
+				success:function(html){
+					stove_record();
+				}
+			});
+		}
+	}
+</script>
+</div>
+	<script>
+	var str = "customer_id=86000&customer_tel=0912000111&plankey=N";
+	function gas_record(s,k){$.ajax({cache:false,type:"GET",url:"gas_record.asp",data:str+"&page="+s+"&key="+k,success:function(html){$("#gas_history_record").html(html);}});}
+	gas_record(1,'');
+	function stove_record(){$.ajax({cache:false,type:"GET",url:"machine_record.asp",data:str,success:function(html){$("#machine_history_record").html(html);}});}
+	stove_record();
+	</script>
+
+
+	</td></tr>
+	</tbody></table>
+
+
+<!---ENDDING --->
+<br>
+<table border="0" cellpadding="0" cellspacing="0" width="100%">
+  <tbody>
+  <tr bgcolor="#ffffff">
+    <td align="middle" height="25"><font class="sw" color="#000000" face="\&quot;Arial," helvetica,="" sans-serif\"="" size="4"><b> 版權所有<font color="#000033">
+      <dfn><font color="#0000cc">捷 程 資 訊 有 限 公 司</font></dfn></font> 盜拷必究</b>
+      <br><font size="4">TEL :   02-29649895</font></font></td></tr></tbody></table>
+ 
+ 
+
+</center></form><div class="eui-calendar" style="left: 224px; top: 479px; display: none;"><ul class="eui-calendar-selectcontent "><li><select data-calendar="year" id="year_deliver_date"><option value="2010">2010年</option><option value="2011">2011年</option><option value="2012">2012年</option><option value="2013">2013年</option><option value="2014">2014年</option><option value="2015">2015年</option><option value="2016">2016年</option><option value="2017">2017年</option><option value="2018">2018年</option><option value="2019">2019年</option><option value="2020">2020年</option><option value="2021">2021年</option><option value="2022">2022年</option><option value="2023">2023年</option><option value="2024">2024年</option><option value="2025">2025年</option><option value="2026">2026年</option><option value="2027">2027年</option></select></li><li><select data-calendar="month" id="month_deliver_date"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></li></ul><ul class="eui-calendar-week"><li class="eui-calendar-weekday">日</li><li class="eui-calendar-weekday">一</li><li class="eui-calendar-weekday">二</li><li class="eui-calendar-weekday">三</li><li class="eui-calendar-weekday">四</li><li class="eui-calendar-weekday">五</li><li class="eui-calendar-weekday">六</li></ul><ul class="eui-calendar-datecontent datecontent-deliver_date"><li class="eui-calendar-date" data-calendar="day">1</li><li class="eui-calendar-date" data-calendar="day">2</li><li class="eui-calendar-date" data-calendar="day">3</li><li class="eui-calendar-date" data-calendar="day">4</li><li class="eui-calendar-date" data-calendar="day">5</li><li class="eui-calendar-date eui-calendar-today" data-calendar="day">6</li><li class="eui-calendar-date" data-calendar="day">7</li><li class="eui-calendar-date" data-calendar="day">8</li><li class="eui-calendar-date" data-calendar="day">9</li><li class="eui-calendar-date" data-calendar="day">10</li><li class="eui-calendar-date" data-calendar="day">11</li><li class="eui-calendar-date" data-calendar="day">12</li><li class="eui-calendar-date" data-calendar="day">13</li><li class="eui-calendar-date" data-calendar="day">14</li><li class="eui-calendar-date" data-calendar="day">15</li><li class="eui-calendar-date" data-calendar="day">16</li><li class="eui-calendar-date" data-calendar="day">17</li><li class="eui-calendar-date" data-calendar="day">18</li><li class="eui-calendar-date" data-calendar="day">19</li><li class="eui-calendar-date" data-calendar="day">20</li><li class="eui-calendar-date" data-calendar="day">21</li><li class="eui-calendar-date" data-calendar="day">22</li><li class="eui-calendar-date" data-calendar="day">23</li><li class="eui-calendar-date" data-calendar="day">24</li><li class="eui-calendar-date" data-calendar="day">25</li><li class="eui-calendar-date" data-calendar="day">26</li><li class="eui-calendar-date" data-calendar="day">27</li><li class="eui-calendar-date" data-calendar="day">28</li><li class="eui-calendar-date" data-calendar="day">29</li><li class="eui-calendar-date" data-calendar="day">30</li></ul></div><div class="1793978085712" style="top: 332px; left: 955px; position: absolute; padding: 5px 7px; background: rgb(51, 102, 153); font-size: 16px; margin: 0px auto; text-align: center; width: auto; color: rgb(255, 255, 255); opacity: 0.9; z-index: 10001; display: none;">查詢地址經緯度失敗，請確認您的網路和地址的完整性!</div><div class="eui-calendar" style="left: 224px; top: 479px; display: none;"><ul class="eui-calendar-selectcontent "><li><select data-calendar="year" id="year_deliver_date"><option value="2010">2010年</option><option value="2011">2011年</option><option value="2012">2012年</option><option value="2013">2013年</option><option value="2014">2014年</option><option value="2015">2015年</option><option value="2016">2016年</option><option value="2017">2017年</option><option value="2018">2018年</option><option value="2019">2019年</option><option value="2020">2020年</option><option value="2021">2021年</option><option value="2022">2022年</option><option value="2023">2023年</option><option value="2024">2024年</option><option value="2025">2025年</option><option value="2026">2026年</option><option value="2027">2027年</option></select></li><li><select data-calendar="month" id="month_deliver_date"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></li></ul><ul class="eui-calendar-week"><li class="eui-calendar-weekday">日</li><li class="eui-calendar-weekday">一</li><li class="eui-calendar-weekday">二</li><li class="eui-calendar-weekday">三</li><li class="eui-calendar-weekday">四</li><li class="eui-calendar-weekday">五</li><li class="eui-calendar-weekday">六</li></ul><ul class="eui-calendar-datecontent datecontent-deliver_date"><li class="eui-calendar-date" data-calendar="day">1</li><li class="eui-calendar-date" data-calendar="day">2</li><li class="eui-calendar-date" data-calendar="day">3</li><li class="eui-calendar-date" data-calendar="day">4</li><li class="eui-calendar-date" data-calendar="day">5</li><li class="eui-calendar-date eui-calendar-today" data-calendar="day">6</li><li class="eui-calendar-date" data-calendar="day">7</li><li class="eui-calendar-date" data-calendar="day">8</li><li class="eui-calendar-date" data-calendar="day">9</li><li class="eui-calendar-date" data-calendar="day">10</li><li class="eui-calendar-date" data-calendar="day">11</li><li class="eui-calendar-date" data-calendar="day">12</li><li class="eui-calendar-date" data-calendar="day">13</li><li class="eui-calendar-date" data-calendar="day">14</li><li class="eui-calendar-date" data-calendar="day">15</li><li class="eui-calendar-date" data-calendar="day">16</li><li class="eui-calendar-date" data-calendar="day">17</li><li class="eui-calendar-date" data-calendar="day">18</li><li class="eui-calendar-date" data-calendar="day">19</li><li class="eui-calendar-date" data-calendar="day">20</li><li class="eui-calendar-date" data-calendar="day">21</li><li class="eui-calendar-date" data-calendar="day">22</li><li class="eui-calendar-date" data-calendar="day">23</li><li class="eui-calendar-date" data-calendar="day">24</li><li class="eui-calendar-date" data-calendar="day">25</li><li class="eui-calendar-date" data-calendar="day">26</li><li class="eui-calendar-date" data-calendar="day">27</li><li class="eui-calendar-date" data-calendar="day">28</li><li class="eui-calendar-date" data-calendar="day">29</li><li class="eui-calendar-date" data-calendar="day">30</li></ul></div><div class="eui-calendar" style="left: 189px; top: 610px; display: none;"><ul class="eui-calendar-selectcontent "><li><select data-calendar="year" id="year_sdate"><option value="2010">2010年</option><option value="2011">2011年</option><option value="2012">2012年</option><option value="2013">2013年</option><option value="2014">2014年</option><option value="2015">2015年</option><option value="2016">2016年</option><option value="2017">2017年</option><option value="2018">2018年</option><option value="2019">2019年</option><option value="2020">2020年</option><option value="2021">2021年</option><option value="2022">2022年</option><option value="2023">2023年</option><option value="2024">2024年</option><option value="2025">2025年</option><option value="2026">2026年</option><option value="2027">2027年</option></select></li><li><select data-calendar="month" id="month_sdate"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></li></ul><ul class="eui-calendar-week"><li class="eui-calendar-weekday">日</li><li class="eui-calendar-weekday">一</li><li class="eui-calendar-weekday">二</li><li class="eui-calendar-weekday">三</li><li class="eui-calendar-weekday">四</li><li class="eui-calendar-weekday">五</li><li class="eui-calendar-weekday">六</li></ul><ul class="eui-calendar-datecontent datecontent-sdate"><li class="eui-calendar-date" data-calendar="day">1</li><li class="eui-calendar-date" data-calendar="day">2</li><li class="eui-calendar-date" data-calendar="day">3</li><li class="eui-calendar-date" data-calendar="day">4</li><li class="eui-calendar-date" data-calendar="day">5</li><li class="eui-calendar-date eui-calendar-today" data-calendar="day">6</li><li class="eui-calendar-date" data-calendar="day">7</li><li class="eui-calendar-date" data-calendar="day">8</li><li class="eui-calendar-date" data-calendar="day">9</li><li class="eui-calendar-date" data-calendar="day">10</li><li class="eui-calendar-date" data-calendar="day">11</li><li class="eui-calendar-date" data-calendar="day">12</li><li class="eui-calendar-date" data-calendar="day">13</li><li class="eui-calendar-date" data-calendar="day">14</li><li class="eui-calendar-date" data-calendar="day">15</li><li class="eui-calendar-date" data-calendar="day">16</li><li class="eui-calendar-date" data-calendar="day">17</li><li class="eui-calendar-date" data-calendar="day">18</li><li class="eui-calendar-date" data-calendar="day">19</li><li class="eui-calendar-date" data-calendar="day">20</li><li class="eui-calendar-date" data-calendar="day">21</li><li class="eui-calendar-date" data-calendar="day">22</li><li class="eui-calendar-date" data-calendar="day">23</li><li class="eui-calendar-date" data-calendar="day">24</li><li class="eui-calendar-date" data-calendar="day">25</li><li class="eui-calendar-date" data-calendar="day">26</li><li class="eui-calendar-date" data-calendar="day">27</li><li class="eui-calendar-date" data-calendar="day">28</li><li class="eui-calendar-date" data-calendar="day">29</li><li class="eui-calendar-date" data-calendar="day">30</li></ul></div><div class="eui-calendar" style="left: 339px; top: 610px; display: none;"><ul class="eui-calendar-selectcontent "><li><select data-calendar="year" id="year_edate"><option value="2010">2010年</option><option value="2011">2011年</option><option value="2012">2012年</option><option value="2013">2013年</option><option value="2014">2014年</option><option value="2015">2015年</option><option value="2016">2016年</option><option value="2017">2017年</option><option value="2018">2018年</option><option value="2019">2019年</option><option value="2020">2020年</option><option value="2021">2021年</option><option value="2022">2022年</option><option value="2023">2023年</option><option value="2024">2024年</option><option value="2025">2025年</option><option value="2026">2026年</option><option value="2027">2027年</option></select></li><li><select data-calendar="month" id="month_edate"><option value="1">1月</option><option value="2">2月</option><option value="3">3月</option><option value="4">4月</option><option value="5">5月</option><option value="6">6月</option><option value="7">7月</option><option value="8">8月</option><option value="9">9月</option><option value="10">10月</option><option value="11">11月</option><option value="12">12月</option></select></li></ul><ul class="eui-calendar-week"><li class="eui-calendar-weekday">日</li><li class="eui-calendar-weekday">一</li><li class="eui-calendar-weekday">二</li><li class="eui-calendar-weekday">三</li><li class="eui-calendar-weekday">四</li><li class="eui-calendar-weekday">五</li><li class="eui-calendar-weekday">六</li></ul><ul class="eui-calendar-datecontent datecontent-edate"><li class="eui-calendar-date" data-calendar="day">1</li><li class="eui-calendar-date" data-calendar="day">2</li><li class="eui-calendar-date" data-calendar="day">3</li><li class="eui-calendar-date" data-calendar="day">4</li><li class="eui-calendar-date" data-calendar="day">5</li><li class="eui-calendar-date eui-calendar-today" data-calendar="day">6</li><li class="eui-calendar-date" data-calendar="day">7</li><li class="eui-calendar-date" data-calendar="day">8</li><li class="eui-calendar-date" data-calendar="day">9</li><li class="eui-calendar-date" data-calendar="day">10</li><li class="eui-calendar-date" data-calendar="day">11</li><li class="eui-calendar-date" data-calendar="day">12</li><li class="eui-calendar-date" data-calendar="day">13</li><li class="eui-calendar-date" data-calendar="day">14</li><li class="eui-calendar-date" data-calendar="day">15</li><li class="eui-calendar-date" data-calendar="day">16</li><li class="eui-calendar-date" data-calendar="day">17</li><li class="eui-calendar-date" data-calendar="day">18</li><li class="eui-calendar-date" data-calendar="day">19</li><li class="eui-calendar-date" data-calendar="day">20</li><li class="eui-calendar-date" data-calendar="day">21</li><li class="eui-calendar-date" data-calendar="day">22</li><li class="eui-calendar-date" data-calendar="day">23</li><li class="eui-calendar-date" data-calendar="day">24</li><li class="eui-calendar-date" data-calendar="day">25</li><li class="eui-calendar-date" data-calendar="day">26</li><li class="eui-calendar-date" data-calendar="day">27</li><li class="eui-calendar-date" data-calendar="day">28</li><li class="eui-calendar-date" data-calendar="day">29</li><li class="eui-calendar-date" data-calendar="day">30</li></ul></div></body></html>

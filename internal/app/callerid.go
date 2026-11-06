@@ -105,6 +105,12 @@ func (a *App) callerInfo(ctx context.Context, id int64) (map[string]any, error) 
 	if err != nil {
 		return nil, err
 	}
+	if last == nil {
+		// 還沒在新系統訂過：用舊系統最後一次送貨
+		if last, err = a.legacyLast(ctx, id); err != nil {
+			return nil, err
+		}
+	}
 	c["last_order"] = last
 	var open int64
 	if err := a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM orders WHERE customer_id = ? AND status IN ('new','dispatched')`, id).Scan(&open); err != nil {

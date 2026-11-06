@@ -50,6 +50,9 @@ func (a *App) getCustomer(r *http.Request, u *User) (any, error) {
 	if c["recent_orders"], err = rows(ctx, a.DB, `SELECT id, order_no, status, total_amount, ordered_at, delivered_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 20`, id); err != nil {
 		return nil, err
 	}
+	if c["legacy"], err = a.customerLegacy(ctx, id); err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 

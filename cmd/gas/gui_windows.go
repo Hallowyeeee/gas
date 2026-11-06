@@ -46,6 +46,7 @@ type ui struct {
 	quit     chan struct{}
 	once     sync.Once
 	ready    chan struct{}
+	hidden   bool // 開機自動啟動：先藏在右下角
 }
 
 func newUI(url, dir string) *ui {
@@ -86,6 +87,9 @@ func (u *ui) Run(ctx context.Context) {
 		return r
 	})
 	u.oldProc, _, _ = procSetWindowLongPtr.Call(u.hwnd, gwlpWndProc, cb)
+	if u.hidden {
+		procShowWindow.Call(u.hwnd, swHide)
+	}
 	wv.Navigate(u.url)
 	close(u.ready)
 	go func() {

@@ -20,7 +20,8 @@ type Event struct {
 	Type    string         `json:"type"`              // "orders" 資料有變、"dispatch" 有新派單、"call" 來電
 	Message string         `json:"message,omitempty"` // 通知文字
 	Order   map[string]any `json:"order,omitempty"`
-	Call    map[string]any `json:"call,omitempty"` // "call" 有電話打進來
+	Call    map[string]any `json:"call,omitempty"`    // "call" 有電話打進來
+	Capture map[string]any `json:"capture,omitempty"` // "capture" 從舊系統抓到一位客人，等確認
 }
 
 type sub struct {

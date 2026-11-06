@@ -145,3 +145,9 @@ dialog::backdrop { background:rgba(0,0,0,.4); }
 .url { font-weight:600; word-break:break-all; }
 
 @media (max-width:520px) { .brand { display:none; } .nav a { padding:14px 10px; } .top .muted { display:none; } }
+/* 舊系統抓資料 */
+dialog.capdlg { width:min(96vw,760px); }
+.was { font-size:12px; color:var(--accent); min-height:0; }
+.capsum { margin-top:12px; padding:10px 12px; border-radius:10px; background:var(--bg); display:grid; gap:6px; line-height:1.7; }
+.steps { padding-left:20px; line-height:2; }
+.steps .btn { display:inline-block; padding:4px 12px; border-radius:8px; text-decoration:none; cursor:grab; }
