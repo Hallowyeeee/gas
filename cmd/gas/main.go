@@ -31,6 +31,7 @@ func main() {
 	noTunnel := flag.Bool("no-tunnel", false, "不要開 Cloudflare 通道")
 	noBrowser := flag.Bool("no-browser", false, "不要開視窗（只跑後端）")
 	useBrowser := flag.Bool("browser", false, "用瀏覽器開，不用程式視窗")
+	startHidden := flag.Bool("tray", false, "開機自動啟動用：只在右下角，不跳出視窗")
 	flag.Parse()
 
 	var out io.Writer = os.Stdout
@@ -59,6 +60,7 @@ func main() {
 	defer stop()
 
 	ui := newUI(local, baseDir)
+	ui.hidden = *startHidden
 	restart := false
 	a := &app.App{DB: db, Static: web.Static(), ExePath: exe}
 	a.Restart = func() { restart = true; ui.Quit(); stop() }
