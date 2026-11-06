@@ -72,7 +72,11 @@ func (a *App) localCapture(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") ||
 		strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxCaptureBytes)
-		res, err := a.addCapture(r.Context(), r.FormValue("url"), r.FormValue("html"))
+		if err := r.ParseForm(); err != nil {
+			writeCaptureResult(w, nil, bad("讀取失敗："+err.Error()))
+			return
+		}
+		res, err := a.captureFromForm(r.Context(), r.PostForm)
 		writeCaptureResult(w, res, err)
 		return
 	}
@@ -95,6 +99,43 @@ func (a *App) localCapture(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
+}
+
+// captureFromForm：書籤小工具可能送來好幾個框架的網頁（enc=uri 表示有編碼過，避免中文編碼問題），
+// 找出讀得懂的那一頁；都讀不懂就列出收到哪些頁，方便查原因。
+func (a *App) captureFromForm(ctx context.Context, f url.Values) (map[string]any, error) {
+	pages, urls, titles := f["html"], f["url"], f["title"]
+	if len(pages) == 0 {
+		return nil, bad("沒有收到網頁內容")
+	}
+	var diag []string
+	for i, page := range pages {
+		if f.Get("enc") == "uri" {
+			if dec, err := url.QueryUnescape(strings.ReplaceAll(page, "+", "%2B")); err == nil {
+				page = dec
+			}
+		}
+		src, title := "", ""
+		if i < len(urls) {
+			src = urls[i]
+		}
+		if i < len(titles) {
+			title = titles[i]
+		}
+		if _, err := ParseLegacyPage(page); err == nil {
+			return a.addCapture(ctx, src, page)
+		}
+		short := src
+		if j := strings.Index(short, "?"); j > 0 {
+			short = short[:j]
+		}
+		if j := strings.LastIndex(short, "/"); j >= 0 {
+			short = short[j+1:]
+		}
+		diag = append(diag, fmt.Sprintf("%s〔%s〕%d 字", short, title, len([]rune(page))))
+	}
+	log.Println("抓舊資料失敗，收到：", strings.Join(diag, "；"))
+	return nil, bad(errNotCustomerPage.Error() + "（收到：" + strings.Join(diag, "；") + "）")
 }
 
 // writeCaptureResult 小視窗顯示結果，成功的話 1.5 秒後自己關掉。
