@@ -71,7 +71,7 @@ func TestUpgradeFromV1(t *testing.T) {
 	defer db.Close()
 	var v int
 	db.QueryRow(`SELECT version FROM schema_version`).Scan(&v)
-	if _, err := db.Exec(`INSERT INTO call_logs (phone) VALUES ('0912')`); err != nil || v != 2 {
+	if _, err := db.Exec(`INSERT INTO call_logs (phone) VALUES ('0912')`); err != nil || v != len(upgrades) {
 		t.Fatal("升級失敗", v, err)
 	}
 }

@@ -91,6 +91,14 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/local/call", a.localCall)
 	m.HandleFunc("POST /api/local/call", a.localCall)
 
+	m.HandleFunc("GET /api/legacy/captures", a.route(a.listCaptures, office...))
+	m.HandleFunc("GET /api/legacy/captures/{id}", a.route(a.getCapture, office...))
+	m.HandleFunc("POST /api/legacy/captures/{id}/save", a.route(a.saveCapture, office...))
+	m.HandleFunc("POST /api/legacy/captures/{id}/cancel", a.route(a.cancelCapture, office...))
+	m.HandleFunc("POST /api/legacy/upload", a.route(a.uploadCapture, office...))
+	m.HandleFunc("POST /api/local/capture", a.localCapture)
+	m.HandleFunc("OPTIONS /api/local/capture", a.localCapture)
+
 	m.HandleFunc("GET /api/settings", a.route(a.getSettings, office...))
 	m.HandleFunc("PUT /api/settings", a.route(a.putSettings, admin))
 	m.HandleFunc("GET /api/system", a.route(a.systemStatus, office...))

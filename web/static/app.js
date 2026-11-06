@@ -130,6 +130,7 @@ function connectEvents() {
   es.onmessage = ev => {
     let e; try { e = JSON.parse(ev.data); } catch { return; }
     if (e.type === 'call' && S.me && S.me.role !== 'driver') { showCall(e.call); return; }
+    if (e.type === 'capture' && S.me && S.me.role !== 'driver') { beep(); showCapture(e.capture.id); return; }
     if (e.type === 'dispatch') {
       beep();
       toast('🔔 新派單：' + e.message, 'ok');
@@ -139,7 +140,7 @@ function connectEvents() {
     }
     rerender();
   };
-  es.onopen = () => setOnline(true);
+  es.onopen = () => { setOnline(true); checkCaptures(); };
 }
 setInterval(() => rerender(), 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { flush(); rerender(); } });
@@ -600,6 +601,160 @@ async function officeNew(view) {
 }
 
 // ---------------------------------------------------------------------
+// 從舊系統抓資料：瀏覽器按 F12 → 這裡跳出確認視窗 → Enter 存、Esc 不存
+// ---------------------------------------------------------------------
+const LEGACY_FIELDS = [['name', '名字 *'], ['phone', '電話'], ['phone2', '電話 2'], ['address', '地址 *'], ['area', '區域'], ['tax_id', '統一編號']];
+S.capQueue = [];
+function capDialog() {
+  let d = $('#capdlg');
+  if (!d) { d = document.createElement('dialog'); d.id = 'capdlg'; d.className = 'capdlg'; document.body.appendChild(d); }
+  return d;
+}
+async function checkCaptures() {
+  if (!S.me || S.me.role === 'driver') return;
+  try {
+    const list = await api('GET', '/api/legacy/captures');
+    if (list.length) showCapture(list[list.length - 1].id);
+  } catch { }
+}
+const cylText = (size, qty) => qty > 0 ? `${size} 借走 ${qty} 支` : `${size} 寄放 ${-qty} 支在店裡`;
+async function showCapture(id) {
+  const d = capDialog();
+  if (d.open) { if (+d.dataset.id !== +id && !S.capQueue.includes(id)) S.capQueue.push(id); if (+d.dataset.id === +id) loadCapture(id); return; }
+  loadCapture(id);
+}
+async function loadCapture(id) {
+  const d = capDialog();
+  let r;
+  try { r = await api('GET', '/api/legacy/captures/' + id); } catch (e) { toast(e.message, 'bad'); return; }
+  if (r.status !== 'pending') return nextCapture();
+  const p = r.page, m = r.matches;
+  const cur = c => c || {};
+  d.dataset.id = id;
+  const bal = Object.entries(p.balance || {});
+  const last = (p.deliveries || [])[0];
+  const prices = Object.entries(p.prices || {});
+  d.innerHTML = `<form method="dialog">
+    <h2 style="margin-top:0">📥 舊系統資料 <span class="pill">編號 ${esc(p.legacy_id)}</span></h2>
+    ${(p.warnings || []).map(w => `<div class="call-warn">⚠ ${esc(w)}</div>`).join('')}
+    <label>存成</label><select name="dest">
+      ${m.map(c => `<option value="${c.id}">更新：${esc(c.name)}（${esc(c.match_by)}對到）</option>`).join('')}
+      <option value="0" ${m.length ? '' : 'selected'}>新增一位新客戶</option></select>
+    <div class="form-grid" id="capf">${LEGACY_FIELDS.map(([k, t]) => `<div><label>${t}</label><input name="${k}" value="${esc(p[k] ?? '')}"><div class="was" data-was="${k}"></div></div>`).join('')}
+      <div><label>&nbsp;</label><label style="color:var(--text)"><input type="checkbox" name="needs_invoice" ${p.needs_invoice ? 'checked' : ''}>要開發票${p.invoice ? `<span class="muted">（舊系統：${esc(p.invoice)}）</span>` : ''}</label></div></div>
+    <label>備註（舊系統的注意事項）</label><textarea name="note" rows="2">${esc(p.note || '')}</textarea><div class="was" data-was="note"></div>
+    <div class="capsum">
+      <div>🛢 桶子：${bal.length ? bal.map(([s, q]) => `<span class="pill ${q > 0 ? 'bad' : 'blue'}">${esc(cylText(s, q))}</span>`).join(' ') : '<span class="muted">沒有借桶或寄桶</span>'}</div>
+      <div>🚚 送貨紀錄 <b>${(p.deliveries || []).length}</b> 筆${last ? `，最近一次 ${esc(last.at.slice(0, 10))}：${esc(last.items.map(i => i.size + '×' + i.qty).join('、'))}` : ''}${r.saved_deliveries ? `<span class="muted">（之前已存 ${r.saved_deliveries} 筆，重複的不會再存）</span>` : ''}</div>
+      ${(p.cylinders_out || []).length ? `<div>🔖 出桶鋼瓶 ${p.cylinders_out.length} 支：${p.cylinders_out.map(c => esc(c.size + ' ' + c.barcode)).join('、')}</div>` : ''}
+      ${prices.length ? `<div>💲 舊系統售價：${prices.map(([s, v]) => {
+        const prod = r.products[s];
+        if (!prod) return `<span class="pill">${esc(s)} ${money(v)}</span>`;
+        if (prod.sale_price === v) return `<span class="pill">${esc(s)} ${money(v)}（同原價）</span>`;
+        return `<label class="pill accent" style="cursor:pointer"><input type="checkbox" data-price="${prod.id}" data-v="${v}" checked> ${esc(s)} ${money(v)} 設成特價（原價 ${money(prod.sale_price)}）</label>`;
+      }).join(' ')}</div>` : ''}
+    </div>
+    <div class="row" style="margin-top:14px"><button class="primary" value="ok">存檔（Enter）</button><button value="cancel" formnovalidate>不存（Esc）</button>
+      ${S.capQueue.length ? `<span class="muted">後面還有 ${S.capQueue.length} 筆</span>` : ''}</div></form>`;
+  const form = $('form', d);
+  const showWas = () => {
+    const t = m.find(c => String(c.id) === form.elements.dest.value);
+    $$('[data-was]', d).forEach(el => {
+      const k = el.dataset.was, old = t ? cur(t)[k] : null, now = form.elements[k].value.trim();
+      el.textContent = t && (old ?? '') !== now ? '原本：' + (old || '（空白）') : '';
+    });
+  };
+  form.elements.dest.onchange = showWas;
+  form.oninput = showWas;
+  showWas();
+  form.onsubmit = async e => {
+    if (e.submitter && e.submitter.value === 'cancel') return;
+    e.preventDefault();
+    const f = Object.fromEntries(LEGACY_FIELDS.map(([k]) => [k, form.elements[k].value]));
+    f.note = form.elements.note.value; f.needs_invoice = form.elements.needs_invoice.checked;
+    const body = { customer_id: +form.elements.dest.value, customer: f, prices: $$('[data-price]', d).filter(x => x.checked).map(x => ({ product_id: +x.dataset.price, price: +x.dataset.v })) };
+    try {
+      const res = await api('POST', `/api/legacy/captures/${id}/save`, body);
+      d.close('saved');
+      toast(`✓ 已存：${f.name}（新增送貨紀錄 ${res.deliveries_added} 筆${res.refill_days ? `，大約 ${res.refill_days} 天叫一次` : ''}）`, 'ok');
+      store.del('c:/api/customers?limit=1000');
+      rerender();
+    } catch (err) { toast(err.message, 'bad'); }
+  };
+  d.onclose = async () => {
+    if (d.returnValue !== 'saved') { await api('POST', `/api/legacy/captures/${id}/cancel`, {}).catch(() => { }); toast('沒有存（要的話在舊系統再按一次 F12）'); }
+    d.returnValue = '';
+    nextCapture();
+  };
+  // textarea 裡按 Enter 換行；Ctrl+Enter 一樣存檔
+  form.elements.note.onkeydown = e => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); form.requestSubmit(); } };
+  if (!d.open) d.showModal();
+  $('button.primary', d).focus();
+}
+function nextCapture() { const n = S.capQueue.shift(); if (n) setTimeout(() => showCapture(n), 50); }
+
+function legacyCustomerHTML(lg) {
+  if (!lg) return '';
+  const i = lg.info, pr = Object.entries(i.prices || {}), tot = Object.entries(i.totals || {});
+  return `<div class="card"><h3 style="margin-top:0">📥 舊系統資料 <span class="pill">編號 ${esc(i.legacy_id)}</span> <span class="muted" style="font-size:13px;font-weight:400">最後抓取 ${esc(i.captured_at)}</span></h3>
+    <div class="row" style="gap:6px;flex-wrap:wrap">
+      ${lg.balance.length ? lg.balance.map(b => `<span class="pill ${b.qty > 0 ? 'bad' : 'blue'}">${esc(cylText(b.size, b.qty))}</span>`).join('') : '<span class="muted">沒有借桶或寄桶</span>'}
+      ${i.cylinder_type ? `<span class="pill">瓦斯桶別 ${esc(i.cylinder_type)}</span>` : ''}
+      ${pr.length ? `<span class="muted">舊售價 ${pr.map(([s, v]) => esc(s) + ' ' + money(v)).join('、')}</span>` : ''}
+      ${tot.length ? `<span class="muted">累計購買 ${tot.map(([s, v]) => esc(s) + ' ' + v).join('、')}</span>` : ''}</div>
+    ${lg.cylinders_out.length ? `<h4>出桶鋼瓶（在客人那邊）</h4><div class="table-wrap"><table><tr><th>條碼</th><th>規格</th><th>下次檢驗</th><th>桶齡</th><th>出桶</th><th class="num">天數</th><th>司機</th></tr>
+      ${lg.cylinders_out.map(c => `<tr><td>${esc(c.barcode)}</td><td>${esc(c.size || '')}</td><td>${esc(c.next_inspection || '')}${c.next_inspection && c.next_inspection < today() ? ' <span class="pill bad">過期</span>' : ''}</td><td>${c.age_years ?? ''}</td><td>${esc((c.out_at || '').slice(0, 10))}</td><td class="num">${c.days ?? ''}</td><td>${esc(c.driver_name || '')}</td></tr>`).join('')}</table></div>` : ''}
+    <h4>舊送貨紀錄 <span class="pill">${lg.deliveries.length}</span></h4>
+    <div class="table-wrap" style="max-height:360px;overflow:auto"><table><tr><th>日期</th><th>品項</th><th class="num">金額</th><th>鋼瓶</th><th>付款</th><th>送貨員</th><th>備註</th></tr>
+      ${lg.deliveries.map(x => `<tr><td style="white-space:nowrap">${esc(x.delivered_at.slice(0, 16))}</td><td>${esc(x.items || '')}${x.stored_gas ? ' 存氣 ' + x.stored_gas : ''}</td><td class="num">${money(x.amount)}</td><td>${esc(x.cylinder || '')}</td><td>${esc(x.pay_status || '')}</td><td>${esc(x.driver_name || '')}</td><td>${esc(x.note || '')}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div></div>`;
+}
+
+// 書籤小工具：在舊系統網頁裡按 F12，把目前的客戶頁送到這台電腦的瓦斯行程式
+function bookmarkletCode() {
+  const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? location.origin : 'http://localhost:8080';
+  const src = `(function(){var U='${local}/api/local/capture';
+function md(){var w=window.top;try{var f=w.frames.main;if(f&&f.document&&f.document.body)return f.document}catch(e){}return document}
+function tip(m,ok){try{var d=md(),b=d.createElement('div');b.textContent=m;b.style.cssText='position:fixed;z-index:2147483647;right:16px;top:16px;max-width:480px;padding:12px 18px;border-radius:8px;font:bold 18px sans-serif;color:#fff;background:'+(ok?'#2b8a3e':'#c92a2a')+';box-shadow:0 4px 16px rgba(0,0,0,.3)';d.body.appendChild(b);setTimeout(function(){b.remove()},ok?2500:7000)}catch(e){alert(m)}}
+function send(){var d=md(),x=Math.max(0,(screen.availWidth||1200)-460),w=window.open('','gascap','width=440,height=150,left='+x+',top=40');if(!w){tip('✗ 小視窗被擋住了：請按網址列右邊的「已封鎖彈出式視窗」圖示，選「一律允許」，再按一次 F12');return}var f=d.createElement('form');f.method='POST';f.action=U;f.target='gascap';f.acceptCharset='UTF-8';f.style.display='none';[['url',d.location.href],['html',d.documentElement.outerHTML]].forEach(function(p){var i=d.createElement('textarea');i.name=p[0];i.value=p[1];f.appendChild(i)});d.body.appendChild(f);f.submit();f.remove()}
+function key(e){if(e.key==='F12'||e.keyCode===123){e.preventDefault();e.stopPropagation();send()}}
+function arm(w){try{if(!w.__gasF12){w.__gasF12=1;w.addEventListener('keydown',key,true)}}catch(e){}try{for(var i=0;i<w.frames.length;i++)arm(w.frames[i])}catch(e){}}
+var t=window.top;if(!t.__gasTimer)t.__gasTimer=setInterval(function(){arm(t)},1000);arm(t);
+if(/客戶編號/.test(md().body.innerText||''))send();else tip('✓ 已開啟：打開客戶的訂單頁按 F12 就會送到瓦斯行',true)})()`;
+  return 'javascript:' + encodeURIComponent(src.replace(/\n/g, ''));
+}
+
+async function legacySettingsCard() {
+  let pending = [], saved = [];
+  try { [pending, saved] = await Promise.all([api('GET', '/api/legacy/captures'), api('GET', '/api/legacy/captures?status=saved')]); } catch { }
+  return `<div class="card" id="legacyCard"><h3 style="margin-top:0">📥 從舊系統抓客戶資料（F12）</h3>
+    <ol class="steps">
+      <li>用 Chrome 開舊系統。按 <b>Ctrl+Shift+B</b> 打開書籤列。</li>
+      <li>把這個按鈕<b>拖到書籤列</b>上：<a class="btn primary" id="bm" href="${esc(bookmarkletCode())}" onclick="event.preventDefault();toast('請用拖的，把它拖到 Chrome 的書籤列')">📥 抓到瓦斯行</a>
+        <button type="button" id="bmCopy">拖不過去？複製</button></li>
+      <li>每次登入舊系統後，點一下書籤列的「📥 抓到瓦斯行」。之後在客戶頁按 <b>F12</b>，這裡就會跳出確認視窗，按 <b>Enter</b> 存、<b>Esc</b> 不存。</li>
+    </ol>
+    <p class="muted">按 F12 時右上角會閃一個小視窗顯示「✓ 已送到瓦斯行」再自己關掉。第一次如果 Chrome 說「已封鎖彈出式視窗」，請按網址列右邊那個圖示選<b>一律允許</b>。拖不過去的話：按「複製」，在書籤列按右鍵 →「新增網頁」，名稱打「抓到瓦斯行」，網址貼上。</p>
+    <div class="row"><label style="margin:0">或上傳 Ctrl+S 存下來的網頁檔（gas_record.html）：</label><input type="file" id="capFile" accept=".htm,.html" style="width:auto"></div>
+    <p class="muted">已存 ${saved.length >= 200 ? '200+' : saved.length} 位${pending.length ? `，<a href="javascript:" id="capPending">待確認 ${pending.length} 筆</a>` : ''}</p></div>`;
+}
+function bindLegacySettings(view) {
+  const c = $('#bmCopy', view);
+  if (c) c.onclick = async () => {
+    const code = $('#bm', view).getAttribute('href');
+    try { await navigator.clipboard.writeText(code); toast('已複製', 'ok'); } catch { prompt('請全選複製', code); }
+  };
+  const f = $('#capFile', view);
+  if (f) f.onchange = async () => {
+    const file = f.files[0]; if (!file) return;
+    try { const r = await api('POST', '/api/legacy/upload', { html: await file.text() }); toast('讀到：' + r.name, 'ok'); showCapture(r.id); }
+    catch (e) { toast(e.message, 'bad'); }
+    f.value = '';
+  };
+  const p = $('#capPending', view);
+  if (p) p.onclick = () => checkCaptures();
+}
+
+// ---------------------------------------------------------------------
 // 電腦版：客戶
 // ---------------------------------------------------------------------
 async function customerList(view) {
@@ -675,7 +830,8 @@ async function customerDetail(view, id) {
       <div class="row" style="margin-top:8px"><select id="pp" style="width:auto">${products.filter(p => p.category !== 'empty_cylinder').map(p => `<option value="${p.id}">${esc(p.name)}（${money(p.sale_price)}）</option>`).join('')}</select>
       <input id="pv" type="number" placeholder="特價" style="width:120px"><button id="setprice">設定</button></div></div>
     <div class="card table-wrap"><h3 style="margin-top:0">最近訂單</h3><table>
-      ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td class="num">${money(o.total_amount)}</td><td>${esc(o.delivered_at || o.ordered_at)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>`;
+      ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td class="num">${money(o.total_amount)}</td><td>${esc(o.delivered_at || o.ordered_at)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
+    ${legacyCustomerHTML(c.legacy)}`;
   const reload = () => customerDetail(view, id);
   $('#f').onsubmit = async e => {
     e.preventDefault();
@@ -786,8 +942,8 @@ async function reconcile(view) {
 async function settings(view) {
   const [sys, users, cfg] = await Promise.all([api('GET', '/api/system'), S.me.role === 'admin' ? api('GET', '/api/users') : [], api('GET', '/api/settings')]);
   const admin = S.me.role === 'admin';
-  const callCard = await callSettingsCard();
-  view.innerHTML = `<h2>設定</h2>${callCard}
+  const [callCard, legacyCard] = await Promise.all([callSettingsCard(), legacySettingsCard()]);
+  view.innerHTML = `<h2>設定</h2>${callCard}${legacyCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -809,6 +965,7 @@ async function settings(view) {
       ${sys.local ? '' : '<div class="muted">更新只能在店裡的電腦上按。</div>'}</div>` : `<p class="muted">版本 ${esc(sys.version)}</p>`}`;
   S.live = false;
   bindCallSettings(view);
+  bindLegacySettings(view);
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   if (!admin) return;
   $('#updCheck').onclick = async () => {
