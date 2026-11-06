@@ -71,7 +71,7 @@ func (t *Tunnel) exePath() string {
 	if t.Download && runtime.GOOS == "windows" {
 		t.set("-", "第一次使用，正在下載 Cloudflare 通道程式…")
 		if err := download("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe", local); err != nil {
-			log.Println("下載 cloudflared 失敗:", err)
+			log.Println("下載 cloudflared 失敗（可手動下載 cloudflared-windows-amd64.exe，改名 cloudflared.exe 放到 gas.exe 旁邊）:", shortErr(err))
 			return ""
 		}
 		return local
@@ -80,7 +80,26 @@ func (t *Tunnel) exePath() string {
 }
 
 func download(url, dst string) error {
-	resp, err := http.Get(url)
+	client := &http.Client{
+		Timeout: 10 * time.Minute,
+		Transport: &http.Transport{
+			Proxy:               http.ProxyFromEnvironment,
+			TLSHandshakeTimeout: 60 * time.Second,
+		},
+	}
+	var lastErr error
+	for try := 1; try <= 3; try++ {
+		if lastErr = downloadOnce(client, url, dst); lastErr == nil {
+			return nil
+		}
+		log.Printf("下載第 %d 次失敗：%v", try, lastErr)
+		time.Sleep(time.Duration(try*5) * time.Second)
+	}
+	return lastErr
+}
+
+func downloadOnce(client *http.Client, url, dst string) error {
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -117,11 +136,11 @@ func (t *Tunnel) Run(ctx context.Context) {
 	for ctx.Err() == nil {
 		exe := t.exePath()
 		if exe == "" {
-			t.set("", "找不到 Cloudflare 通道程式（cloudflared），手機暫時只能在店裡 WiFi 使用")
+			t.set("", "找不到 Cloudflare 通道程式（cloudflared），30 秒後重試；手機暫時只能在店裡 WiFi 使用")
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(5 * time.Minute):
+			case <-time.After(30 * time.Second):
 				continue
 			}
 		}
@@ -292,4 +311,13 @@ func (a *App) backupNow(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"path": p}, nil
+}
+
+// shortErr 把很長的下載網址從錯誤訊息拿掉，畫面比較好讀。
+func shortErr(err error) string {
+	msg := err.Error()
+	if i := strings.Index(msg, "\": "); i >= 0 {
+		return msg[i+3:]
+	}
+	return msg
 }
