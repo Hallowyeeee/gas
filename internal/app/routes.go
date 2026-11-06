@@ -85,6 +85,9 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/calls", a.route(a.listCalls, office...))
 	m.HandleFunc("GET /api/calls/lookup", a.route(a.lookupCaller, office...))
 	m.HandleFunc("POST /api/calls/test", a.route(a.testCall, office...))
+	m.HandleFunc("GET /api/callerid", a.route(a.callerBoxStatus, office...))
+	m.HandleFunc("POST /api/callerid/detect", a.route(a.callerBoxDetect, admin))
+	m.HandleFunc("POST /api/callerid/use", a.route(a.callerBoxUse, admin))
 	m.HandleFunc("GET /api/local/call", a.localCall)
 	m.HandleFunc("POST /api/local/call", a.localCall)
 

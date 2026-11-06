@@ -70,6 +70,7 @@ func main() {
 		go a.Tunnel.Run(ctx)
 	}
 	go a.CheckUpdateOnStart(ctx, ui.Notify)
+	a.StartCallerBox()
 
 	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

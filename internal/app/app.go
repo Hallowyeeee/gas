@@ -40,6 +40,8 @@ type App struct {
 	OnDispatch func(driverID int64, order map[string]any)
 
 	mu sync.Mutex // 產生單號時避免重複
+
+	callerBox *CallerBox
 }
 
 // OpenDB 開啟（必要時建立）資料庫。

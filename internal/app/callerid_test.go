@@ -1,8 +1,10 @@
 package app
 
 import (
+	"io"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestNormalizePhone(t *testing.T) {
@@ -72,4 +74,70 @@ func TestUpgradeFromV1(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO call_logs (phone) VALUES ('0912')`); err != nil || v != 2 {
 		t.Fatal("升級失敗", v, err)
 	}
+}
+
+func TestExtractPhone(t *testing.T) {
+	cases := map[string]string{
+		"0912345678\r\n":                  "0912345678",
+		"\x02L1 02-2345-6789\x03":         "0223456789",
+		"11061530" + "0912345678":         "0912345678",
+		"RING\r\nDATE=1106 NMBR=23456789": "23456789",
+		"hello":                           "",
+	}
+	for in, want := range cases {
+		if got := extractPhone([]byte(in)); got != want {
+			t.Errorf("%q → %q，應該是 %q", in, got, want)
+		}
+	}
+}
+
+type fakePort struct {
+	ch chan []byte
+}
+
+func (f *fakePort) Read(b []byte) (int, error) {
+	select {
+	case d := <-f.ch:
+		return copy(b, d), nil
+	case <-time.After(50 * time.Millisecond):
+		return 0, nil
+	}
+}
+func (f *fakePort) Close() error { return nil }
+
+func TestCallerBoxListen(t *testing.T) {
+	a, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "phone": "0912000001", "address": "中正路 1 號"})
+	fp := &fakePort{ch: make(chan []byte, 4)}
+	serialPorts = func() []string { return []string{"COM9"} }
+	serialOpen = func(name string, baud int) (io.ReadCloser, error) { return fp, nil }
+	usbDevices = func() []string { return []string{"Ports | USB Serial (COM9)"} }
+	defer func() { serialPorts, serialOpen, usbDevices = listSerialPorts, openSerial, listUSBDevices }()
+
+	// 偵測：收到資料只顯示，不跳來電
+	boss.ok("POST", "/api/callerid/detect", map[string]any{"baud": 1200})
+	fp.ch <- []byte("\x02 0912000001 \x03")
+	time.Sleep(500 * time.Millisecond)
+	st := boss.ok("GET", "/api/callerid", nil)
+	rec := st["recent"].([]any)
+	if st["detecting"] != true || len(rec) != 1 || rec[0].(map[string]any)["phone"] != "0912000001" {
+		t.Fatal("偵測結果不對", st)
+	}
+	if l := boss.list("/api/calls"); len(l) != 0 {
+		t.Fatal("偵測時不該記來電", l)
+	}
+	// 選定 COM9 → 平常模式，來電會記錄
+	boss.ok("POST", "/api/callerid/use", map[string]any{"port": "COM9", "baud": 1200})
+	time.Sleep(200 * time.Millisecond)
+	fp.ch <- []byte("0912000001\r\n")
+	time.Sleep(500 * time.Millisecond)
+	fp.ch <- []byte("0912000001\r\n") // 重複送不算第二通
+	time.Sleep(500 * time.Millisecond)
+	l := boss.list("/api/calls")
+	if len(l) != 1 || l[0].(map[string]any)["customer_name"] != "王小明" || l[0].(map[string]any)["source"] != "box" {
+		t.Fatal("盒子來電沒記到", l)
+	}
+	a.box().stopRun()
 }
