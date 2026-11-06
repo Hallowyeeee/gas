@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 type client struct {
@@ -305,5 +307,50 @@ func TestFindTunnelURL(t *testing.T) {
 	}
 	if u := findTunnelURL(`INF |  https://happy-cat-blue-moon.trycloudflare.com  |`); u != "https://happy-cat-blue-moon.trycloudflare.com" {
 		t.Fatal("抓不到網址", u)
+	}
+}
+
+func TestDispatchEventReachesDriver(t *testing.T) {
+	_, c := setup(t)
+	boss := c.as(c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})["token"].(string))
+	ming := id(boss.ok("POST", "/api/users", map[string]any{"name": "阿明", "role": "driver", "login_name": "ming", "password": "pass1234"}))
+	tok := c.ok("POST", "/api/login", map[string]any{"login_name": "ming", "password": "pass1234"})["token"].(string)
+	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg", "category": "gas", "sale_price": 900}))
+	cust := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 1 號"}))
+
+	req, _ := http.NewRequest("GET", c.srv.URL+"/api/events", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	got := make(chan string, 10)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				got <- string(buf[:n])
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	<-got // retry 行
+	boss.ok("POST", "/api/orders", map[string]any{"customer_id": cust, "driver_id": ming, "items": []any{map[string]any{"product_id": gas, "qty": 1}}})
+	all := ""
+	timeout := time.After(3 * time.Second)
+	for !strings.Contains(all, `"dispatch"`) {
+		select {
+		case s := <-got:
+			all += s
+		case <-timeout:
+			t.Fatal("師傅沒收到派單通知:", all)
+		}
+	}
+	if !strings.Contains(all, "王小明") {
+		t.Fatal("通知內容要有客戶名", all)
 	}
 }

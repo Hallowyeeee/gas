@@ -1,0 +1,127 @@
+:root {
+  --bg:#f4f5f7; --card:#fff; --text:#1f2328; --muted:#656d76; --line:#d8dee4;
+  --accent:#d9480f; --accent-soft:#fff0e6; --ok:#2b8a3e; --ok-soft:#e6f4ea; --bad:#c92a2a; --bad-soft:#fdecec;
+  --blue:#1c64d1; --blue-soft:#e8f0fd; --shadow:0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0d1117; --card:#161b22; --text:#e6edf3; --muted:#8d96a0; --line:#30363d;
+    --accent:#ff8c42; --accent-soft:#3a2416; --ok:#3fb950; --ok-soft:#14301c; --bad:#f85149; --bad-soft:#3b1617;
+    --blue:#58a6ff; --blue-soft:#132a4a; --shadow:none;
+  }
+}
+* { box-sizing:border-box; }
+html, body { margin:0; }
+body { font-family:system-ui,"Microsoft JhengHei","PingFang TC",sans-serif; background:var(--bg); color:var(--text); font-size:16px; -webkit-tap-highlight-color:transparent; }
+a { color:var(--blue); }
+[hidden] { display:none !important; }
+
+/* 版面 */
+.top { position:sticky; top:0; z-index:10; background:var(--card); border-bottom:1px solid var(--line); }
+.top-inner { max-width:1280px; margin:0 auto; display:flex; align-items:center; gap:4px; padding:0 12px; overflow-x:auto; }
+.brand { font-weight:700; padding:12px 8px 12px 0; white-space:nowrap; }
+.brand b { color:var(--accent); }
+.nav { display:flex; flex-shrink:0; }
+.nav a { display:inline-block; padding:14px 12px; color:var(--muted); text-decoration:none; white-space:nowrap; border-bottom:3px solid transparent; }
+.nav a.on { color:var(--text); border-color:var(--accent); font-weight:600; }
+.top .spacer { flex:1; }
+.net { font-size:13px; color:var(--muted); white-space:nowrap; padding:0 8px; }
+.net.off { color:var(--bad); font-weight:600; }
+main { max-width:1280px; margin:0 auto; padding:16px 12px 80px; }
+h2 { font-size:20px; margin:4px 0 14px; }
+h3 { font-size:16px; margin:16px 0 8px; }
+
+/* 元件 */
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.between { justify-content:space-between; }
+.grow { flex:1; min-width:0; }
+.muted { color:var(--muted); font-size:14px; }
+.big { font-size:20px; font-weight:700; }
+.money { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+.pill { display:inline-block; font-size:13px; padding:2px 8px; border-radius:99px; background:var(--bg); color:var(--muted); border:1px solid var(--line); white-space:nowrap; }
+.pill.accent { background:var(--accent-soft); color:var(--accent); border-color:transparent; }
+.pill.ok { background:var(--ok-soft); color:var(--ok); border-color:transparent; }
+.pill.bad { background:var(--bad-soft); color:var(--bad); border-color:transparent; }
+.pill.blue { background:var(--blue-soft); color:var(--blue); border-color:transparent; }
+
+button, .btn { font:inherit; padding:9px 14px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; text-decoration:none; display:inline-block; }
+button.primary, .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+button.ok { background:var(--ok); border-color:var(--ok); color:#fff; font-weight:600; }
+button.danger { color:var(--bad); border-color:var(--bad); background:transparent; }
+button.ghost { border-color:transparent; background:transparent; color:var(--blue); }
+button.lg { padding:14px 18px; font-size:18px; width:100%; }
+button:disabled { opacity:.5; cursor:default; }
+
+label { display:block; font-size:14px; color:var(--muted); margin:10px 0 4px; }
+input, select, textarea { font:inherit; width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
+textarea { min-height:60px; }
+input[type=checkbox] { width:auto; transform:scale(1.3); margin-right:6px; }
+.form-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:0 12px; }
+
+table { width:100%; border-collapse:collapse; font-size:15px; }
+th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:middle; }
+th { color:var(--muted); font-weight:500; font-size:13px; white-space:nowrap; }
+td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+tr.bad td { background:var(--bad-soft); }
+tr.click { cursor:pointer; }
+tr.click:hover td { background:var(--bg); }
+.table-wrap { overflow-x:auto; }
+
+/* 訂單看板 */
+.board { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-items:start; }
+@media (max-width:900px) { .board { grid-template-columns:1fr; } }
+.col h3 { margin:0 0 8px; display:flex; justify-content:space-between; }
+.order { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:8px; box-shadow:var(--shadow); }
+.order.new { border-left-color:var(--accent); }
+.order.dispatched { border-left-color:var(--blue); }
+.order.delivered { border-left-color:var(--ok); }
+.order.pending { opacity:.6; }
+.order .title { font-weight:600; }
+.order .addr { font-size:14px; color:var(--muted); margin:2px 0 6px; }
+.order .actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+.order .actions button { padding:6px 10px; font-size:14px; }
+
+/* 記單 */
+.new-grid { display:grid; grid-template-columns:minmax(280px,380px) 1fr; gap:16px; align-items:start; }
+@media (max-width:900px) { .new-grid { grid-template-columns:1fr; } }
+.results { max-height:420px; overflow:auto; }
+.result { padding:10px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+.result:hover, .result.on { background:var(--accent-soft); border-color:var(--accent); }
+.quick { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.quick .q { border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--bg); }
+.quick .q.has { border-color:var(--accent); background:var(--accent-soft); }
+.stepper { display:flex; align-items:center; gap:6px; margin-top:6px; }
+.stepper button { width:40px; height:40px; padding:0; font-size:20px; }
+.stepper input { width:56px; text-align:center; padding:8px 4px; }
+.total-bar { display:flex; justify-content:space-between; align-items:center; font-size:20px; font-weight:700; margin:12px 0; }
+
+/* 師傅手機版 */
+.driver main { max-width:560px; }
+.job { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+.job .name { font-size:20px; font-weight:700; }
+.job .addr { font-size:17px; margin:6px 0; }
+.job .links { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:10px 0; }
+.job .links a { text-align:center; padding:12px; border-radius:10px; background:var(--blue-soft); color:var(--blue); text-decoration:none; font-weight:600; }
+.job.done { opacity:.75; }
+.segment { display:flex; gap:6px; margin:8px 0; }
+.segment button { flex:1; padding:12px; }
+.segment button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+.summary-strip { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.summary-strip .card { margin:0; text-align:center; padding:10px; }
+
+/* 提示 */
+#toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); z-index:100; display:flex; flex-direction:column; gap:8px; align-items:center; width:min(92vw,480px); pointer-events:none; }
+.toast { background:#1f2328; color:#fff; padding:12px 16px; border-radius:10px; font-size:15px; box-shadow:0 4px 16px rgba(0,0,0,.25); pointer-events:auto; }
+.toast.bad { background:var(--bad); }
+.toast.ok { background:var(--ok); }
+dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); padding:18px; width:min(94vw,560px); max-height:90vh; }
+dialog::backdrop { background:rgba(0,0,0,.4); }
+
+/* 登入 */
+.center { max-width:420px; margin:40px auto; }
+#qr { background:#fff; display:inline-block; padding:8px; border-radius:8px; }
+#qr:empty { display:none; }
+.url { font-weight:600; word-break:break-all; }
+
+@media (max-width:520px) { .brand { display:none; } .nav a { padding:14px 10px; } .top .muted { display:none; } }

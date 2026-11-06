@@ -28,7 +28,7 @@ jobs:
         run: |
           VERSION="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
-          cp docs/試跑教學.md dist/
+          cp docs/試跑教學.md dist/guide.md
 
       - name: 發布到「最新版」下載頁
         uses: softprops/action-gh-release@v2
@@ -37,9 +37,9 @@ jobs:
           name: 最新版
           body: |
             下載 gas.exe，放到店裡電腦的一個資料夾（例如 C:\瓦斯行），雙擊執行。
-            教學請看 試跑教學.md。
+            教學請看 guide.md（試跑教學）。
             版本：${{ github.sha }}
           files: |
             dist/gas.exe
-            dist/試跑教學.md
+            dist/guide.md
           make_latest: true

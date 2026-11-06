@@ -27,6 +27,8 @@ type App struct {
 	Backup *Backup
 	Static fs.FS
 
+	Events *Hub
+
 	// OnDispatch 派單後呼叫（之後用來發手機通知）
 	OnDispatch func(driverID int64, order map[string]any)
 
@@ -132,6 +134,8 @@ func pathID(r *http.Request) (int64, error) {
 	}
 	return id, nil
 }
+
+func nilCtx() context.Context { return context.Background() }
 
 // rows 把查詢結果轉成 []map，方便直接回傳 JSON。
 func rows(ctx context.Context, q interface {

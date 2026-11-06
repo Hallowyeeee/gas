@@ -211,7 +211,7 @@ func (a *App) startSession(w http.ResponseWriter, r *http.Request, u *User) (any
 	a.DB.ExecContext(r.Context(), `DELETE FROM sessions WHERE expires_at < datetime('now','localtime')`)
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: !isLocal(r),
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("Cf-Connecting-Ip") != "",
 	})
 	return map[string]any{"user": u, "token": token}, nil
 }

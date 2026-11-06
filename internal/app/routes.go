@@ -2,13 +2,22 @@ package app
 
 import (
 	"io/fs"
+	"mime"
 	"net/http"
 	"strings"
 )
 
+func init() { mime.AddExtensionType(".webmanifest", "application/manifest+json") }
+
 // Handler 回傳整個網站（API + 網頁）。
 func (a *App) Handler() http.Handler {
 	m := http.NewServeMux()
+	if a.Events == nil {
+		a.Events = &Hub{}
+	}
+	if a.OnDispatch == nil {
+		a.OnDispatch = a.onDispatch
+	}
 	const (
 		admin  = "admin"
 		staff  = "staff"
@@ -78,6 +87,10 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/system", a.route(a.systemStatus, office...))
 	m.HandleFunc("POST /api/system/backup", a.route(a.backupNow, admin))
 
+	m.HandleFunc("GET /api/events", a.handleEvents)
+	m.HandleFunc("GET /api/push/key", a.route(a.pushKey))
+	m.HandleFunc("POST /api/push/subscribe", a.route(a.pushSubscribe))
+
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "沒有這個功能"})
 	})
@@ -96,7 +109,7 @@ func (a *App) Handler() http.Handler {
 			files.ServeHTTP(w, r)
 		})
 	}
-	return securityHeaders(m)
+	return securityHeaders(a.notifyChanges(m))
 }
 
 func securityHeaders(h http.Handler) http.Handler {
