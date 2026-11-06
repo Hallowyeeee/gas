@@ -31,6 +31,8 @@ type App struct {
 
 	// ShowWindow 把電腦上的程式視窗叫到最前面
 	ShowWindow func()
+	// OpenURL 用電腦預設程式打開網址（例如 line:// 打開 LINE 電腦版）
+	OpenURL func(url string)
 	// ExePath、Restart 給線上更新用
 	ExePath string
 	Restart func()

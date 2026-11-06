@@ -380,3 +380,23 @@ func TestUpdateCheck(t *testing.T) {
 		t.Fatal("師傅不能按更新", code)
 	}
 }
+
+func TestOpenLINE(t *testing.T) {
+	a, c := setup(t)
+	var opened string
+	a.OpenURL = func(u string) { opened = u }
+	if m := c.ok("POST", "/api/local/open-line", map[string]any{}); m["ok"] != true || opened != "line://" {
+		t.Fatal("店裡電腦要能打開 LINE", m, opened)
+	}
+	req, _ := http.NewRequest("POST", c.srv.URL+"/api/local/open-line", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Cf-Connecting-Ip", "1.2.3.4")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Fatal("外面連進來不能叫店裡電腦開程式", resp.StatusCode)
+	}
+}

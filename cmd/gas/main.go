@@ -66,6 +66,7 @@ func main() {
 	a.Restart = func() { restart = true; ui.Quit(); stop() }
 	a.Backup = &app.Backup{DB: db, DefaultDir: filepath.Join(baseDir, "backups")}
 	a.ShowWindow = ui.Show
+	a.OpenURL = openBrowser
 	go a.Backup.Run(ctx)
 	if !*noTunnel {
 		a.Tunnel = &app.Tunnel{Port: *port, Dir: baseDir, Download: true}

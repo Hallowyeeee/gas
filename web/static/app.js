@@ -102,13 +102,66 @@ function rerender() {
   rerenderTimer = setTimeout(() => route(true), 80);
 }
 
-function toast(msg, kind = '') {
+function toast(msg, kind = '', action) {
   const t = document.createElement('div');
   t.className = 'toast ' + kind;
   t.textContent = msg;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-btn'; b.textContent = action.label;
+    b.onclick = () => { t.remove(); action.fn(); };
+    t.appendChild(b);
+  }
   $('#toast').appendChild(t);
-  setTimeout(() => t.remove(), kind === 'bad' ? 6000 : 3000);
+  setTimeout(() => t.remove(), action ? 10000 : kind === 'bad' ? 6000 : 3000);
 }
+
+// ---------------------------------------------------------------------
+// 一鍵傳 LINE：把派單內容整理好，複製並打開 LINE，貼到師傅群組送出
+// ---------------------------------------------------------------------
+function lineText(o) {
+  const items = (o.items && o.items.length) ? o.items.map(i => `${i.product_name}×${i.qty}`).join('、') : (o.summary || '');
+  const where = [o.address, o.floor, o.has_elevator === 0 ? '無電梯' : ''].filter(Boolean).join('・');
+  return [
+    `【派單】${o.driver_name || ''}`.trim(),
+    `單號：${o.order_no || ''}`,
+    `客戶：${o.customer_name || ''}`,
+    o.phone ? `電話：${o.phone}` : '',
+    `地址：${where}`,
+    items ? `品項：${items}` : '',
+    o.billing_type === 'monthly' ? `金額：${money(o.total_amount)}（月結，不用收錢）` : `收款：${money(o.total_amount)}`,
+    o.note ? `備註：${o.note}` : '',
+    o.address ? `地圖：https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* 改用舊方法 */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch (e) { /* 不支援 */ }
+  ta.remove();
+  return ok;
+}
+
+async function sendLine(order) {
+  let o = order;
+  if (o.id && !(o.items && o.items.length)) {
+    try { o = { ...o, ...(await api('GET', '/api/orders/' + o.id)) }; } catch (e) { /* 離線就用手上的資料 */ }
+  }
+  const text = lineText(o);
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    location.href = 'https://line.me/R/share?text=' + encodeURIComponent(text);
+    return;
+  }
+  const copied = await copyText(text);
+  let opened = false;
+  try { opened = (await api('POST', '/api/local/open-line', {})).ok; } catch (e) { /* 不是在店裡電腦 */ }
+  if (!copied) { prompt('請複製下面的文字，貼到 LINE：', text); return; }
+  toast(opened ? '訊息已複製，LINE 打開後選師傅群組，按 Ctrl+V 貼上送出' : '訊息已複製，到 LINE 師傅群組按 Ctrl+V 貼上送出', 'ok');
+}
+const lineAction = o => ({ label: '傳 LINE', fn: () => sendLine(o) });
 
 function beep() {
   try {
@@ -373,6 +426,7 @@ function orderCard(o, drivers) {
   let actions = '';
   if (o.status === 'new' || o.status === 'dispatched') {
     actions = drivers.map(d => `<button data-dispatch="${o.id}" data-driver="${d.id}" ${o.driver_id === d.id ? 'class="primary"' : ''}>${esc(d.name)}</button>`).join('')
+      + (o.status === 'dispatched' ? `<button class="ghost" data-line="${o.id}">傳 LINE</button>` : '')
       + `<button class="ghost" data-open="${o.id}">詳情</button>`;
   } else {
     actions = `<button class="ghost" data-open="${o.id}">詳情</button>`;
@@ -402,12 +456,14 @@ async function officeOrders(view) {
   view.onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.open) location.hash = '#/order/' + b.dataset.open;
+    if (b.dataset.line) { const o = orders.find(x => x.id === +b.dataset.line); if (o) sendLine(o); }
     if (b.dataset.dispatch) {
       const id = +b.dataset.dispatch, driver = +b.dataset.driver;
       const d = drivers.find(x => x.id === driver);
       patch('/api/orders?limit=300', list => list.map(o => o.id === id ? { ...o, status: 'dispatched', driver_id: driver, driver_name: d.name, _pending: true } : o));
       queue('POST', `/api/orders/${id}/dispatch`, { driver_id: driver }, '派單');
-      toast(`已派給 ${d.name}`, 'ok');
+      const o = orders.find(x => x.id === id);
+      toast(`已派給 ${d.name}`, 'ok', o && lineAction({ ...o, driver_id: driver, driver_name: d.name }));
       route(true);
     }
   };
@@ -432,13 +488,16 @@ async function orderDetail(view, id) {
       <div class="row" style="margin-top:10px">
         <button id="saveNote">儲存備註</button>
         ${editable ? `<select id="drv" style="width:auto"><option value="">派給…</option>${drivers.map(d => `<option value="${d.id}" ${d.id === o.driver_id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select>
+          ${o.status === 'dispatched' ? '<button id="sendLine">傳 LINE</button>' : ''}
           <button id="deliverHere">店裡代按送達</button><button class="danger" id="cancel">取消訂單</button>` : ''}
         ${o.status === 'delivered' && S.me.role === 'admin' ? '<button class="danger" id="undeliver">改回未送達</button>' : ''}
       </div></div>`;
   const reload = () => orderDetail(view, id);
   $('#saveNote').onclick = async () => { await api('PUT', '/api/orders/' + id, { note: $('#note').value }); toast('已儲存', 'ok'); };
   if (editable) {
-    $('#drv').onchange = async e => { if (!e.target.value) return; await api('POST', `/api/orders/${id}/dispatch`, { driver_id: +e.target.value }); toast('已派單', 'ok'); reload(); };
+    $('#drv').onchange = async e => { if (!e.target.value) return; const d = drivers.find(x => x.id === +e.target.value);
+      await api('POST', `/api/orders/${id}/dispatch`, { driver_id: d.id }); toast(`已派給 ${d.name}`, 'ok', lineAction({ ...o, driver_id: d.id, driver_name: d.name })); reload(); };
+    const sl = $('#sendLine'); if (sl) sl.onclick = () => sendLine(o);
     $('#cancel').onclick = async () => { if (!confirm('確定取消這張單？')) return; await api('POST', `/api/orders/${id}/cancel`, {}); toast('已取消'); reload(); };
     $('#deliverHere').onclick = () => {
       if (o.status !== 'dispatched') return toast('要先派給師傅', 'bad');
@@ -589,7 +648,7 @@ async function officeNew(view) {
     try {
       const o = await api('POST', '/api/orders', body);
       const k = S.calls.find(x => x.id === st.callId); if (k) { k.state = 'done'; k.order_no = o.order_no; saveCalls(); }
-      toast(`已建立 ${o.order_no}${o.driver_name ? '，派給 ' + o.driver_name : ''}`, 'ok');
+      toast(`已建立 ${o.order_no}${o.driver_name ? '，派給 ' + o.driver_name : ''}`, 'ok', o.driver_name ? lineAction(o) : null);
     } catch (e) {
       if (!e.network) { btn.disabled = false; return toast(e.message, 'bad'); }
       queue('POST', '/api/orders', body, '建立訂單');

@@ -115,6 +115,16 @@ func (a *App) Handler() http.Handler {
 		}
 		return map[string]bool{"ok": true}, nil
 	}))
+	m.HandleFunc("POST /api/local/open-line", a.public(func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if !isLocal(r) {
+			return nil, forbidden()
+		}
+		if a.OpenURL == nil {
+			return map[string]bool{"ok": false}, nil
+		}
+		a.OpenURL("line://")
+		return map[string]bool{"ok": true}, nil
+	}))
 	m.HandleFunc("GET /api/events", a.handleEvents)
 	m.HandleFunc("GET /api/push/key", a.route(a.pushKey))
 	m.HandleFunc("POST /api/push/subscribe", a.route(a.pushSubscribe))
