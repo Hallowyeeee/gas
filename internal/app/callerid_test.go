@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/hallowyeeee/gas/internal/serialport"
 )
 
 func TestNormalizePhone(t *testing.T) {
@@ -114,7 +116,7 @@ func TestCallerBoxListen(t *testing.T) {
 	serialPorts = func() []string { return []string{"COM9"} }
 	serialOpen = func(name string, baud int) (io.ReadCloser, error) { return fp, nil }
 	usbDevices = func() []string { return []string{"Ports | USB Serial (COM9)"} }
-	defer func() { serialPorts, serialOpen, usbDevices = listSerialPorts, openSerial, listUSBDevices }()
+	defer func() { serialPorts, serialOpen, usbDevices = serialport.Ports, serialport.Open, serialport.Devices }()
 
 	// 偵測：收到資料只顯示，不跳來電
 	boss.ok("POST", "/api/callerid/detect", map[string]any{"baud": 1200})

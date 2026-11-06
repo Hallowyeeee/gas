@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hallowyeeee/gas/internal/serialport"
 )
 
 // ---------------------------------------------------------------------
@@ -20,9 +22,9 @@ import (
 
 // 可以換掉（測試用）
 var (
-	serialPorts = listSerialPorts
-	serialOpen  = openSerial
-	usbDevices  = listUSBDevices
+	serialPorts = serialport.Ports
+	serialOpen  = serialport.Open
+	usbDevices  = serialport.Devices
 )
 
 type boxChunk struct {

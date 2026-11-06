@@ -1,6 +1,6 @@
 //go:build !windows
 
-package app
+package serialport
 
 import (
 	"io"
@@ -9,7 +9,7 @@ import (
 )
 
 // 開發用（Linux/Mac）：不設定鮑率，直接讀裝置檔。
-func listSerialPorts() []string {
+func Ports() []string {
 	var out []string
 	for _, p := range []string{"/dev/ttyUSB*", "/dev/ttyACM*", "/dev/tty.usb*"} {
 		m, _ := filepath.Glob(p)
@@ -18,6 +18,6 @@ func listSerialPorts() []string {
 	return out
 }
 
-func openSerial(name string, baud int) (io.ReadCloser, error) { return os.Open(name) }
+func Open(name string, baud int) (io.ReadCloser, error) { return os.Open(name) }
 
-func listUSBDevices() []string { return nil }
+func Devices() []string { return nil }
