@@ -1,3 +1,10 @@
 *.db
+*.db-*
 *.sqlite
 __pycache__/
+/dist/
+/backups/
+gas.log
+cloudflared*
+/gas
+*.exe

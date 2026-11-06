@@ -562,3 +562,16 @@ WHERE c.active = 1 AND c.refill_days IS NOT NULL
   AND (s.snooze_to IS NULL OR s.snooze_to <= date('now','localtime'))
   AND NOT EXISTS (SELECT 1 FROM orders o2
                   WHERE o2.customer_id = c.id AND o2.status IN ('new','dispatched'));
+
+-- =====================================================================
+-- 登入狀態與資料庫版本
+-- =====================================================================
+CREATE TABLE sessions (
+  token      TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+  expires_at TEXT NOT NULL
+);
+
+CREATE TABLE schema_version (version INTEGER NOT NULL);
+INSERT INTO schema_version VALUES (1);
