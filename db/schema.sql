@@ -52,6 +52,11 @@ CREATE TABLE customers (
                     CHECK (billing_type IN ('cash','monthly')),  -- 現結 / 月結
   default_driver_id INTEGER REFERENCES users(id),
   refill_days       INTEGER CHECK (refill_days IS NULL OR refill_days > 0), -- 大約幾天換一次瓶
+  floor             TEXT,                         -- 樓層，例如「5F」
+  has_elevator      INTEGER CHECK (has_elevator IS NULL OR has_elevator IN (0,1)), -- 有沒有電梯
+  needs_invoice     INTEGER NOT NULL DEFAULT 0 CHECK (needs_invoice IN (0,1)),     -- 要不要開發票
+  tax_id            TEXT CHECK (tax_id IS NULL OR (length(tax_id) = 8 AND tax_id NOT GLOB '*[^0-9]*')), -- 統一編號 8 碼
+  invoice_title     TEXT,                         -- 發票抬頭
   note              TEXT,
   active            INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
   created_at        TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
@@ -101,6 +106,9 @@ CREATE TABLE orders (
   address       TEXT    NOT NULL,                 -- 送貨地址（下單當下的快照）
   phone         TEXT,
   total_amount  INTEGER NOT NULL DEFAULT 0,       -- 由明細自動加總，不要手動改
+  needs_invoice INTEGER NOT NULL DEFAULT 0 CHECK (needs_invoice IN (0,1)),
+  tax_id        TEXT,                             -- 開發票時的統編（下單當下的快照）
+  invoice_no    TEXT,                             -- 發票號碼
   note          TEXT,
   ordered_at    TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
   dispatched_at TEXT,
@@ -221,6 +229,30 @@ CREATE TABLE stock_movements (
   created_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX idx_stock_product ON stock_movements(product_id);
+
+-- ---------------------------------------------------------------------
+-- 押瓶費：客戶借鋼瓶收押金、還瓶退押金
+-- qty_change：借出 +、歸還 -；amount：收押金 +、退押金 -
+-- 押金不是營業收入，所以不放在 payments 裡
+-- ---------------------------------------------------------------------
+CREATE TABLE cylinder_deposits (
+  id           INTEGER PRIMARY KEY,
+  customer_id  INTEGER NOT NULL REFERENCES customers(id),
+  product_id   INTEGER NOT NULL REFERENCES products(id), -- 哪種規格的空瓶
+  qty_change   INTEGER NOT NULL,
+  amount       INTEGER NOT NULL,
+  method       TEXT    NOT NULL DEFAULT 'cash'
+               CHECK (method IN ('cash','transfer','check','other')),
+  collected_by INTEGER REFERENCES users(id),     -- 誰收／誰退（師傅或店裡）
+  order_id     INTEGER REFERENCES orders(id),    -- 跟著哪張單一起處理（可空白）
+  receipt_no   TEXT,                             -- 押瓶單號
+  happened_at  TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+  note         TEXT,
+  created_by   INTEGER REFERENCES users(id),
+  CHECK (qty_change <> 0 OR amount <> 0)
+);
+CREATE INDEX idx_deposits_customer  ON cylinder_deposits(customer_id);
+CREATE INDEX idx_deposits_collector ON cylinder_deposits(collected_by, happened_at);
 
 -- 換瓶提醒處理紀錄（已聯絡、延後）
 CREATE TABLE refill_reminder_logs (
@@ -359,6 +391,17 @@ WHEN OLD.total_amount IS NOT NEW.total_amount OR OLD.status IS NOT NEW.status
     json_object('total_amount',OLD.total_amount,'status',OLD.status,'driver_id',OLD.driver_id,'billing_type',OLD.billing_type),
     json_object('total_amount',NEW.total_amount,'status',NEW.status,'driver_id',NEW.driver_id,'billing_type',NEW.billing_type));
 END;
+CREATE TRIGGER trg_audit_deposits_u AFTER UPDATE ON cylinder_deposits BEGIN
+  INSERT INTO audit_log (table_name,row_id,action,old_data,new_data)
+  VALUES ('cylinder_deposits', NEW.id, 'update',
+    json_object('customer_id',OLD.customer_id,'qty_change',OLD.qty_change,'amount',OLD.amount,'collected_by',OLD.collected_by),
+    json_object('customer_id',NEW.customer_id,'qty_change',NEW.qty_change,'amount',NEW.amount,'collected_by',NEW.collected_by));
+END;
+CREATE TRIGGER trg_audit_deposits_d AFTER DELETE ON cylinder_deposits BEGIN
+  INSERT INTO audit_log (table_name,row_id,action,old_data)
+  VALUES ('cylinder_deposits', OLD.id, 'delete',
+    json_object('customer_id',OLD.customer_id,'qty_change',OLD.qty_change,'amount',OLD.amount,'collected_by',OLD.collected_by));
+END;
 CREATE TRIGGER trg_audit_handovers_u AFTER UPDATE ON cash_handovers BEGIN
   INSERT INTO audit_log (table_name,row_id,action,old_data,new_data)
   VALUES ('cash_handovers', NEW.id, 'update',
@@ -399,13 +442,17 @@ WHERE o.status <> 'cancelled';
 -- 每日師傅對帳：
 --   應收現金（已送達的現結單金額）
 --   師傅回報收到的現金
---   師傅交回店裡的現金
+--   師傅收的押瓶費現金
+--   師傅交回店裡的現金（應該 = 回報收到的 + 押瓶費）
 CREATE VIEW v_driver_daily AS
 WITH days AS (
   SELECT driver_id, date(delivered_at) AS work_date FROM orders
     WHERE status = 'delivered' AND driver_id IS NOT NULL
   UNION
   SELECT collected_by, date(received_at) FROM payments
+    WHERE method = 'cash' AND collected_by IN (SELECT id FROM users WHERE role = 'driver')
+  UNION
+  SELECT collected_by, date(happened_at) FROM cylinder_deposits
     WHERE method = 'cash' AND collected_by IN (SELECT id FROM users WHERE role = 'driver')
   UNION
   SELECT driver_id, work_date FROM cash_handovers
@@ -420,6 +467,9 @@ SELECT d.driver_id, u.name AS driver_name, d.work_date,
   COALESCE((SELECT SUM(p.amount) FROM payments p
              WHERE p.collected_by = d.driver_id AND p.method = 'cash'
                AND date(p.received_at) = d.work_date),0) AS reported_cash,
+  COALESCE((SELECT SUM(x.amount) FROM cylinder_deposits x
+             WHERE x.collected_by = d.driver_id AND x.method = 'cash'
+               AND date(x.happened_at) = d.work_date),0) AS deposit_cash,
   COALESCE((SELECT SUM(h.amount) FROM cash_handovers h
              WHERE h.driver_id = d.driver_id AND h.work_date = d.work_date),0) AS handed_cash
 FROM days d JOIN users u ON u.id = d.driver_id;
@@ -428,9 +478,24 @@ FROM days d JOIN users u ON u.id = d.driver_id;
 CREATE VIEW v_driver_daily_mismatch AS
 SELECT *,
        reported_cash - expected_cash AS diff_reported_vs_expected,
-       handed_cash   - reported_cash AS diff_handed_vs_reported
+       handed_cash   - (reported_cash + deposit_cash) AS diff_handed_vs_reported
 FROM v_driver_daily
-WHERE reported_cash <> expected_cash OR handed_cash <> reported_cash;
+WHERE reported_cash <> expected_cash OR handed_cash <> reported_cash + deposit_cash;
+
+-- 客戶押瓶狀況：手上有幾支、押金多少
+CREATE VIEW v_customer_deposits AS
+SELECT x.customer_id, c.name AS customer_name, x.product_id, p.name AS cylinder_name,
+       SUM(x.qty_change) AS cylinders_held,
+       SUM(x.amount)     AS deposit_amount
+FROM cylinder_deposits x
+JOIN customers c ON c.id = x.customer_id
+JOIN products  p ON p.id = x.product_id
+GROUP BY x.customer_id, x.product_id;
+
+-- 押金總額（店裡收著的押金，將來要退的）
+CREATE VIEW v_deposit_total AS
+SELECT COALESCE(SUM(amount),0) AS total_deposit, COALESCE(SUM(qty_change),0) AS cylinders_out
+FROM cylinder_deposits;
 
 -- 客戶帳款餘額（正數 = 客戶還欠店裡）
 CREATE VIEW v_customer_balance AS

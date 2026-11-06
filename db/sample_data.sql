@@ -60,4 +60,14 @@ INSERT INTO orders (id,order_no,customer_id,billing_type,address,driver_id,statu
 INSERT INTO order_items (order_id,product_id,qty,unit_price,amount) VALUES (5,3,1,2200,2200);
 UPDATE orders SET status='delivered', delivered_at='2026-11-06 14:00:00' WHERE id=5;
 INSERT INTO payments (customer_id,order_id,amount,collected_by,received_at) VALUES (4,5,2200,3,'2026-11-06 14:00:00');
-INSERT INTO cash_handovers (driver_id,work_date,amount,received_by) VALUES (3,'2026-11-06',2200,1);
+-- 阿強同時幫張先生辦押瓶 1 支，收押金 1500 現金
+INSERT INTO cylinder_deposits (customer_id,product_id,qty_change,amount,collected_by,order_id,happened_at)
+  VALUES (4,2,1,1500,3,5,'2026-11-06 14:00:00');
+INSERT INTO cash_handovers (driver_id,work_date,amount,received_by) VALUES (3,'2026-11-06',3700,1);
+
+-- 王小明在店裡押 2 支，後來還 1 支
+INSERT INTO cylinder_deposits (customer_id,product_id,qty_change,amount,collected_by,happened_at) VALUES
+  (1,2,2,3000,1,'2026-10-15 09:00:00'),
+  (1,2,-1,-1500,1,'2026-10-20 09:00:00');
+
+UPDATE customers SET needs_invoice=1, tax_id='12345678', invoice_title='陳記餐廳有限公司', floor='1F', has_elevator=0 WHERE id=2;

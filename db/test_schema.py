@@ -74,11 +74,19 @@ db.execute("UPDATE orders SET status='dispatched', delivered_at=NULL WHERE id=1"
 check("訂單 1 改回未送達後 20kg 庫存", one(db, "SELECT qty FROM v_stock WHERE sku='GAS20'")[0], 45)
 check("金額異動有留紀錄", one(db, "SELECT COUNT(*) FROM audit_log WHERE table_name='orders' AND row_id=1")[0] >= 1, True)
 
+# 押瓶：張先生 1 支 1500；王小明押 2 還 1 → 1 支 1500；押金總額 3000
+check("張先生押瓶", one(db, "SELECT cylinders_held, deposit_amount FROM v_customer_deposits WHERE customer_name='張先生'"), (1, 1500))
+check("王小明押瓶", one(db, "SELECT cylinders_held, deposit_amount FROM v_customer_deposits WHERE customer_name='王小明'"), (1, 1500))
+check("押金總額", one(db, "SELECT total_deposit FROM v_deposit_total")[0], 3000)
+check("阿強 11/6 回報+押金=交回", one(db, "SELECT reported_cash, deposit_cash, handed_cash FROM v_driver_daily WHERE driver_name='阿強' AND work_date='2026-11-06'"), (2200, 1500, 3700))
+check("陳記統編", one(db, "SELECT tax_id FROM customers WHERE id=2")[0], "12345678")
+
 # 防呆
 expect_error("已送達的訂單不能改明細", db, "UPDATE order_items SET qty=5, amount=5*900 WHERE order_id=3 AND product_id=1")
 expect_error("明細金額必須 = 數量 × 單價 - 折扣", db,
              "INSERT INTO order_items (order_id,product_id,qty,unit_price,amount) VALUES (1,1,1,900,800)")
 expect_error("派單一定要有師傅", db, "INSERT INTO orders (order_no,customer_id,status,billing_type,address) VALUES ('X',1,'dispatched','cash','x')")
+expect_error("統編一定要 8 位數字", db, "UPDATE customers SET tax_id='1234' WHERE id=1")
 expect_error("收款金額不能是 0", db, "INSERT INTO payments (customer_id,amount) VALUES (1,0)")
 
 print()
