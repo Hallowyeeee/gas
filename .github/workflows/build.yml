@@ -1,12 +1,16 @@
 name: 打包 Windows 程式
 
+# 發布規則：
+# - 一般分支 push：只跑測試、打包（可在 Actions 頁下載試用），不會上下載頁。
+# - 打上 V001、V002… 標籤：才會正式發布。標籤只由「發布管理」那串在老闆確認後打。
 on:
   push:
     branches: [main, master, "claude/**"]
+    tags: ["V*"]
   workflow_dispatch:
 
 concurrency:
-  group: release
+  group: build-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -40,7 +44,12 @@ jobs:
       - name: 打包 gas.exe
         id: ver
         run: |
-          VERSION="$(TZ=Asia/Taipei date +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}"
+          if [[ "$GITHUB_REF" == refs/tags/V* ]]; then
+            VERSION="$GITHUB_REF_NAME"
+            if ! [[ "$VERSION" =~ ^V[0-9]{3,}$ ]]; then echo "版本標籤要像 V001"; exit 1; fi
+          else
+            VERSION="test-$(TZ=Asia/Taipei date +%m%d.%H%M)-${GITHUB_SHA::7}"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/callerid-probe.exe ./cmd/boxprobe
@@ -53,8 +62,18 @@ jobs:
             echo "version: $VERSION"
             echo
             echo "更新內容："
-            git log -8 --pretty='- %s' | grep -v '^- Merge'
+            if [[ "$VERSION" == V* ]]; then
+              # 從 更新日誌.md 取出這一版的段落
+              awk -v v="$VERSION" '/^## /{p = ($2 == v)} p && !/^## /' 更新日誌.md
+            else
+              echo "（測試版，不會上下載頁）"
+              git log -8 --pretty='- %s' | grep -v '^- Merge'
+            fi
           } > dist/notes.md
+          if [[ "$VERSION" == V* ]] && ! grep -q '^## '"$VERSION"'\b' 更新日誌.md; then
+            echo "更新日誌.md 裡沒有 ## $VERSION 這一段，先寫好再發布"; exit 1
+          fi
+          cat dist/notes.md
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,6 +82,7 @@ jobs:
 
   installer:
     needs: build
+    if: startsWith(github.ref, 'refs/tags/V')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -86,11 +106,11 @@ jobs:
           & $iscc "/DAppVersion=${{ needs.build.outputs.version }}" installer\gas.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
-      - name: 發布到「最新版」下載頁
+      - name: 發布到下載頁
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: 最新版 ${{ needs.build.outputs.version }}
+          tag_name: ${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.version }}
           body_path: dist/notes.md
           files: |
             dist/gas-setup.exe
