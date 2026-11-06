@@ -354,3 +354,29 @@ func TestDispatchEventReachesDriver(t *testing.T) {
 		t.Fatal("通知內容要有客戶名", all)
 	}
 }
+
+func TestUpdateCheck(t *testing.T) {
+	if !newerVersion("2026.11.06.0815-abc", "2026.11.06-ffc66d5") || newerVersion("2026.11.06.0815-abc", "2026.11.06.0815-abc") || !newerVersion("x", "dev") {
+		t.Fatal("版本比較錯誤")
+	}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"published_at":"2026-11-06T08:00:00Z","body":"version: 2099.01.01.0000-new\n\n更新內容：\n- 加了更新按鈕","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/gas.exe"}]}`)
+	}))
+	defer fake.Close()
+	old := releaseAPI
+	releaseAPI = fake.URL
+	defer func() { releaseAPI = old }()
+	_, c := setup(t)
+	boss := c.as(c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})["token"].(string))
+	info := boss.ok("POST", "/api/update/check", nil)
+	if info["available"] != true || info["latest"] != "2099.01.01.0000-new" || !strings.Contains(info["notes"].(string), "更新按鈕") {
+		t.Fatal("檢查更新", info)
+	}
+	// 師傅不能更新
+	ming := boss.ok("POST", "/api/users", map[string]any{"name": "阿明", "role": "driver", "login_name": "ming", "password": "pass1234"})
+	_ = ming
+	mc := c.as(c.ok("POST", "/api/login", map[string]any{"login_name": "ming", "password": "pass1234"})["token"].(string))
+	if code, _, _ := mc.do("POST", "/api/update/apply", nil); code != 403 {
+		t.Fatal("師傅不能按更新", code)
+	}
+}

@@ -299,6 +299,8 @@ func (a *App) systemStatus(r *http.Request, u *User) (any, error) {
 		"tunnel_status": status,
 		"lan_urls":      lanAddresses(port),
 		"backup":        a.Backup.Info(),
+		"update":        a.updateStatus(),
+		"local":         isLocal(r),
 	}, nil
 }
 

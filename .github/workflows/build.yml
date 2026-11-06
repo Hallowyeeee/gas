@@ -5,6 +5,10 @@ on:
     branches: [main, master, "claude/**"]
   workflow_dispatch:
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -13,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
 
       - uses: actions/setup-go@v5
         with:
@@ -24,21 +30,32 @@ jobs:
       - name: 自動測試
         run: go test ./...
 
+      - name: 程式圖示
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          cd cmd/gas && go-winres make --arch amd64
+
       - name: 打包 gas.exe
         run: |
-          VERSION="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
-          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
+          VERSION="$(TZ=Asia/Taipei date +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
           cp docs/試跑教學.md dist/guide.md
+          {
+            echo "下載 gas.exe，放到店裡電腦的一個資料夾（例如 C:\\瓦斯行），雙擊執行。教學請看 guide.md。"
+            echo
+            echo "version: $VERSION"
+            echo
+            echo "更新內容："
+            git log -8 --pretty='- %s' | grep -v '^- Merge'
+          } > dist/notes.md
 
       - name: 發布到「最新版」下載頁
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: 最新版
-          body: |
-            下載 gas.exe，放到店裡電腦的一個資料夾（例如 C:\瓦斯行），雙擊執行。
-            教學請看 guide.md（試跑教學）。
-            版本：${{ github.sha }}
+          name: 最新版 ${{ env.VERSION }}
+          body_path: dist/notes.md
           files: |
             dist/gas.exe
             dist/guide.md

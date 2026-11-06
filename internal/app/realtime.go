@@ -111,7 +111,7 @@ func (a *App) notifyChanges(next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: 200}
 		next.ServeHTTP(rec, r)
 		if r.Method != http.MethodGet && rec.status == 200 && strings.HasPrefix(r.URL.Path, "/api/") &&
-			!strings.HasPrefix(r.URL.Path, "/api/login") && !strings.HasPrefix(r.URL.Path, "/api/push") {
+			!strings.HasPrefix(r.URL.Path, "/api/login") && !strings.HasPrefix(r.URL.Path, "/api/push") && !strings.HasPrefix(r.URL.Path, "/api/local") {
 			a.Events.Publish(0, Event{Type: "orders"})
 		}
 	})

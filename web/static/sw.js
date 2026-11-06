@@ -1,6 +1,6 @@
 // 讓網頁可以加到主畫面、斷網時也能打開，並接收派單通知。
-const CACHE = 'gas-v1';
-const SHELL = ['/', '/app.js', '/style.css', '/icon.svg', '/icon-192.png', '/manifest.webmanifest'];
+const CACHE = 'gas-v2';
+const SHELL = ['/', '/app.js', '/style.css', '/favicon.png', '/icon-192.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

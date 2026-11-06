@@ -86,7 +86,18 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("PUT /api/settings", a.route(a.putSettings, admin))
 	m.HandleFunc("GET /api/system", a.route(a.systemStatus, office...))
 	m.HandleFunc("POST /api/system/backup", a.route(a.backupNow, admin))
+	m.HandleFunc("POST /api/update/check", a.route(a.handleUpdateCheck, admin))
+	m.HandleFunc("POST /api/update/apply", a.route(a.handleUpdateApply, admin))
 
+	m.HandleFunc("POST /api/local/show", a.public(func(w http.ResponseWriter, r *http.Request) (any, error) {
+		if !isLocal(r) {
+			return nil, forbidden()
+		}
+		if a.ShowWindow != nil {
+			go a.ShowWindow()
+		}
+		return map[string]bool{"ok": true}, nil
+	}))
 	m.HandleFunc("GET /api/events", a.handleEvents)
 	m.HandleFunc("GET /api/push/key", a.route(a.pushKey))
 	m.HandleFunc("POST /api/push/subscribe", a.route(a.pushSubscribe))

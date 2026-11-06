@@ -29,6 +29,13 @@ type App struct {
 
 	Events *Hub
 
+	// ShowWindow 把電腦上的程式視窗叫到最前面
+	ShowWindow func()
+	// ExePath、Restart 給線上更新用
+	ExePath string
+	Restart func()
+	upd     updater
+
 	// OnDispatch 派單後呼叫（之後用來發手機通知）
 	OnDispatch func(driverID int64, order map[string]any)
 

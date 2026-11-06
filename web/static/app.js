@@ -153,7 +153,7 @@ function shell(nav) {
   document.body.className = S.me.role === 'driver' ? 'driver' : 'office';
   document.body.innerHTML = `
     <header class="top"><div class="top-inner">
-      <div class="brand">🔥 瓦斯行<b>系統</b></div>
+      <div class="brand"><img src="/favicon.png" alt="" style="width:28px;height:28px;border-radius:6px;vertical-align:middle;margin-right:6px">瓦斯行<b>系統</b></div>
       <nav class="nav">${nav.map(([h, t]) => `<a href="${h}">${t}</a>`).join('')}</nav>
       <div class="spacer"></div>
       <span class="net" id="pending"></span><span class="net" id="net"></span>
@@ -174,7 +174,12 @@ async function route(soft) {
   if (!S.me) return showLogin();
   const driver = S.me.role === 'driver';
   const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送']] : OFFICE_NAV;
-  if (lastShell !== S.me.role + S.me.id) { shell(nav); lastShell = S.me.role + S.me.id; connectEvents(); }
+  if (lastShell !== S.me.role + S.me.id) {
+    shell(nav); lastShell = S.me.role + S.me.id; connectEvents();
+    if (S.me.role === 'admin') api('GET', '/api/system').then(sys => {
+      if (sys.update && sys.update.available) $('.nav').insertAdjacentHTML('beforeend', '<a href="#/settings" style="color:var(--accent);font-weight:600">⬆ 有新版</a>');
+    }).catch(() => { });
+  }
   let h = location.hash || (driver ? '#/my' : '#/orders');
   $$('.nav a').forEach(a => a.classList.toggle('on', h === a.getAttribute('href') || h.startsWith(a.getAttribute('href') + '/')));
   const [, page, arg] = h.split('/');
@@ -198,7 +203,7 @@ async function showLogin() {
   document.body.className = '';
   let setup = { needed: false };
   try { setup = await api('GET', '/api/setup'); } catch { }
-  document.body.innerHTML = `<main class="center"><h2>🔥 瓦斯行管理系統</h2>
+  document.body.innerHTML = `<main class="center"><h2><img src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:12px;vertical-align:middle;margin-right:8px">瓦斯行管理系統</h2>
     <div class="card" id="box"></div></main><div id="toast"></div>`;
   const box = $('#box');
   if (setup.needed && !setup.local) { box.innerHTML = '<p>系統還沒設定，請先在店裡電腦打開程式建立老闆帳號。</p>'; return; }
@@ -617,10 +622,38 @@ async function settings(view) {
       <div class="muted">${sys.backup.last_error ? '<span style="color:var(--bad)">上次備份失敗：' + esc(sys.backup.last_error) + '</span>' : '上次備份：' + esc(sys.backup.last_time || '還沒有')}<br>位置：${esc(sys.backup.dir)}</div>
       <label>備份資料夾（建議設成 Google 雲端硬碟裡的資料夾）</label><input id="bdir" value="${esc(cfg.backup_dir || '')}" placeholder="例如 G:\\我的雲端硬碟\\瓦斯行備份">
       <p class="row"><button id="saveDir">儲存</button><button id="bnow">立刻備份一次</button></p></div>` : ''}
-    <p class="muted">版本 ${esc(sys.version)}</p>`;
+    ${admin ? `<div class="card" id="upd"><h3 style="margin-top:0">🔄 程式更新</h3>
+      <div>目前版本：<b>${esc(sys.version)}</b></div>
+      <div id="updInfo" class="muted">${sys.update ? updText(sys.update) : ''}</div>
+      <p class="row"><button id="updCheck">檢查更新</button>
+      <button class="primary" id="updApply" ${sys.update && sys.update.available && sys.local ? '' : 'hidden'}>立即更新</button></p>
+      ${sys.local ? '' : '<div class="muted">更新只能在店裡的電腦上按。</div>'}</div>` : `<p class="muted">版本 ${esc(sys.version)}</p>`}`;
   S.live = false;
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   if (!admin) return;
+  $('#updCheck').onclick = async () => {
+    $('#updInfo').textContent = '檢查中…';
+    try {
+      const u = await api('POST', '/api/update/check', {});
+      $('#updInfo').innerHTML = updText(u);
+      $('#updApply').hidden = !(u.available && sys.local);
+    } catch (e) { $('#updInfo').textContent = e.message; }
+  };
+  $('#updApply').onclick = async () => {
+    if (outbox.length) return toast('還有資料在傳送中，等傳完再更新', 'bad');
+    if (!confirm('要更新嗎？會先自動備份，程式會關掉再自動打開，大約 1 分鐘。')) return;
+    $('#updApply').disabled = true; $('#updInfo').textContent = '下載新版中，請不要關電腦…';
+    try {
+      const r = await api('POST', '/api/update/apply', {});
+      $('#updInfo').textContent = `已下載 ${r.version}，程式正在重新開啟…`;
+      const t0 = Date.now();
+      const wait = async () => {
+        try { const s2 = await api('GET', '/api/system'); if (s2.version !== sys.version) { location.reload(); return; } } catch { }
+        if (Date.now() - t0 < 120000) setTimeout(wait, 2000); else $('#updInfo').textContent = '程式沒有自動打開，請手動雙擊 gas.exe';
+      };
+      setTimeout(wait, 3000);
+    } catch (e) { $('#updInfo').textContent = e.message; $('#updApply').disabled = false; }
+  };
   $('#saveDir').onclick = async () => { await api('PUT', '/api/settings', { backup_dir: $('#bdir').value.trim() }); toast('已儲存', 'ok'); settings(view); };
   $('#bnow').onclick = async () => { try { const r = await api('POST', '/api/system/backup', {}); toast('已備份到 ' + r.path, 'ok'); settings(view); } catch (e) { toast('備份失敗：' + e.message, 'bad'); } };
   $('#addUser').onclick = () => {
@@ -642,6 +675,13 @@ async function settings(view) {
       if (b.dataset.act) { await api('PUT', '/api/users/' + b.dataset.act, { active: b.dataset.v === '1' }); store.del('c:/api/drivers'); settings(view); }
     } catch (err) { toast(err.message, 'bad'); }
   };
+}
+
+function updText(u) {
+  if (!u.latest) return '查不到最新版資訊';
+  return u.available
+    ? `<span style="color:var(--accent);font-weight:600">有新版本 ${esc(u.latest)}</span>（${esc((u.published_at || '').slice(0, 10))}）<pre style="white-space:pre-wrap;font:inherit;margin:6px 0">${esc(u.notes || '')}</pre>`
+    : `已經是最新版（最新 ${esc(u.latest)}，檢查時間 ${esc(u.checked_at)}）`;
 }
 
 // ---------------------------------------------------------------------

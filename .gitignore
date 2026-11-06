@@ -8,3 +8,4 @@ gas.log
 cloudflared*
 /gas
 *.exe
+*.syso
