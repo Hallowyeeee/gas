@@ -15,7 +15,8 @@ import (
 )
 
 // 線上更新：新版放在 GitHub Releases，程式自己去抓。
-var releaseAPI = "https://api.github.com/repos/Hallowyeeee/gas/releases/latest"
+// 只認標籤是 V001、V002… 的正式版，其他（例如舊的 latest、測試版）不理。
+var releaseAPI = "https://api.github.com/repos/Hallowyeeee/gas/releases?per_page=30"
 
 type UpdateInfo struct {
 	Current     string `json:"current"`
@@ -33,17 +34,35 @@ type updater struct {
 	applying bool
 }
 
-var versionLine = regexp.MustCompile(`(?m)^version:\s*(\S+)`)
+var releaseTag = regexp.MustCompile(`^[Vv](\d+)$`)
 
-// newerVersion：版本號格式是「年.月.日.時分-代碼」，可以直接比字串大小。
+// versionNum：V001 → 1；不是正式版號（舊的日期版、dev）回傳 0。
+func versionNum(v string) int {
+	m := releaseTag.FindStringSubmatch(strings.TrimSpace(v))
+	if m == nil {
+		return 0
+	}
+	n := 0
+	fmt.Sscanf(m[1], "%d", &n)
+	return n
+}
+
+// newerVersion：比 V 後面的數字。舊的日期版本號、dev 都算比 V001 舊。
 func newerVersion(remote, local string) bool {
-	if remote == "" {
-		return false
-	}
-	if local == "dev" || local == "" {
-		return true
-	}
-	return remote > local
+	r := versionNum(remote)
+	return r > 0 && r > versionNum(local)
+}
+
+type ghRelease struct {
+	TagName     string `json:"tag_name"`
+	Body        string `json:"body"`
+	PublishedAt string `json:"published_at"`
+	Draft       bool   `json:"draft"`
+	Prerelease  bool   `json:"prerelease"`
+	Assets      []struct {
+		Name string `json:"name"`
+		URL  string `json:"browser_download_url"`
+	} `json:"assets"`
 }
 
 func (a *App) checkUpdate(ctx context.Context) (*UpdateInfo, error) {
@@ -59,27 +78,32 @@ func (a *App) checkUpdate(ctx context.Context) (*UpdateInfo, error) {
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("GitHub 回應 %d", resp.StatusCode)
 	}
-	var rel struct {
-		Body        string `json:"body"`
-		PublishedAt string `json:"published_at"`
-		Assets      []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	var list []ghRelease
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 		return nil, err
 	}
-	info := &UpdateInfo{Current: Version, PublishedAt: rel.PublishedAt, CheckedAt: time.Now().Format("2006-01-02 15:04:05")}
-	if m := versionLine.FindStringSubmatch(rel.Body); m != nil {
-		info.Latest = m[1]
+	// 挑版本號最大的正式版
+	var rel *ghRelease
+	for i := range list {
+		r := &list[i]
+		if r.Draft || r.Prerelease || versionNum(r.TagName) == 0 {
+			continue
+		}
+		if rel == nil || versionNum(r.TagName) > versionNum(rel.TagName) {
+			rel = r
+		}
 	}
-	if i := strings.Index(rel.Body, "更新內容"); i >= 0 {
-		info.Notes = strings.TrimSpace(rel.Body[i:])
-	}
-	for _, as := range rel.Assets {
-		if as.Name == "gas.exe" {
-			info.downloadURL = as.URL
+	info := &UpdateInfo{Current: Version, CheckedAt: time.Now().Format("2006-01-02 15:04:05")}
+	if rel != nil {
+		info.Latest = strings.ToUpper(rel.TagName)
+		info.PublishedAt = rel.PublishedAt
+		if i := strings.Index(rel.Body, "更新內容"); i >= 0 {
+			info.Notes = strings.TrimSpace(rel.Body[i:])
+		}
+		for _, as := range rel.Assets {
+			if as.Name == "gas.exe" {
+				info.downloadURL = as.URL
+			}
 		}
 	}
 	info.Available = info.downloadURL != "" && newerVersion(info.Latest, Version)

@@ -356,11 +356,18 @@ func TestDispatchEventReachesDriver(t *testing.T) {
 }
 
 func TestUpdateCheck(t *testing.T) {
-	if !newerVersion("2026.11.06.0815-abc", "2026.11.06-ffc66d5") || newerVersion("2026.11.06.0815-abc", "2026.11.06.0815-abc") || !newerVersion("x", "dev") {
+	if !newerVersion("V001", "2026.11.06.0815-abc") || !newerVersion("V002", "V001") || newerVersion("V001", "V001") ||
+		!newerVersion("V010", "V009") || newerVersion("V001", "V002") || !newerVersion("V001", "dev") ||
+		newerVersion("2099.01.01.0000-new", "dev") || newerVersion("latest", "V001") {
 		t.Fatal("版本比較錯誤")
 	}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"published_at":"2026-11-06T08:00:00Z","body":"version: 2099.01.01.0000-new\n\n更新內容：\n- 加了更新按鈕","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/gas.exe"}]}`)
+		fmt.Fprint(w, `[
+			{"tag_name":"latest","body":"更新內容：\n- 舊規則的版本","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/old.exe"}]},
+			{"tag_name":"V003","draft":true,"body":"更新內容：\n- 草稿","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/v3.exe"}]},
+			{"tag_name":"V002","published_at":"2026-11-06T08:00:00Z","body":"更新內容：\n- 加了更新按鈕","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/v2.exe"}]},
+			{"tag_name":"V001","body":"更新內容：\n- 第一版","assets":[{"name":"gas.exe","browser_download_url":"https://example.invalid/v1.exe"}]}
+		]`)
 	}))
 	defer fake.Close()
 	old := releaseAPI
@@ -369,7 +376,7 @@ func TestUpdateCheck(t *testing.T) {
 	_, c := setup(t)
 	boss := c.as(c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})["token"].(string))
 	info := boss.ok("POST", "/api/update/check", nil)
-	if info["available"] != true || info["latest"] != "2099.01.01.0000-new" || !strings.Contains(info["notes"].(string), "更新按鈕") {
+	if info["available"] != true || info["latest"] != "V002" || !strings.Contains(info["notes"].(string), "更新按鈕") {
 		t.Fatal("檢查更新", info)
 	}
 	// 師傅不能更新

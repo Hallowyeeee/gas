@@ -1,6 +1,7 @@
 //go:build windows
 
-package app
+// Package serialport 讀 COM 埠（來電顯示盒用）。
+package serialport
 
 import (
 	"context"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -15,8 +17,8 @@ import (
 	"unsafe"
 )
 
-// listSerialPorts 列出電腦上所有 COM 埠。
-func listSerialPorts() []string {
+// Ports 列出電腦上所有 COM 埠。
+func Ports() []string {
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `HARDWARE\DEVICEMAP\SERIALCOMM`, registry.QUERY_VALUE)
 	if err != nil {
 		return nil
@@ -45,8 +47,8 @@ func (p *winPort) Read(b []byte) (int, error) {
 
 func (p *winPort) Close() error { return windows.CloseHandle(p.h) }
 
-// openSerial 開 COM 埠（8N1），每次讀最多等半秒。
-func openSerial(name string, baud int) (io.ReadCloser, error) {
+// Open 開 COM 埠（8N1），每次讀最多等半秒。
+func Open(name string, baud int) (io.ReadCloser, error) {
 	path, _ := windows.UTF16PtrFromString(`\\.\` + name)
 	h, err := windows.CreateFile(path, windows.GENERIC_READ|windows.GENERIC_WRITE, 0, nil, windows.OPEN_EXISTING, 0, 0)
 	if err != nil {
@@ -76,13 +78,13 @@ func openSerial(name string, baud int) (io.ReadCloser, error) {
 	return &winPort{h}, nil
 }
 
-// listUSBDevices 列出 COM 埠、USB、人性化介面裝置，給偵測畫面看。
-func listUSBDevices() []string {
+// Devices 列出 COM 埠、USB、人性化介面裝置，給偵測畫面看。
+func Devices() []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	ps := `[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-PnpDevice -PresentOnly | Where-Object { $_.Class -in 'Ports','HIDClass','USB','Modem','Media' } | ForEach-Object { $_.Class + ' | ' + $_.FriendlyName + ' | ' + $_.InstanceId }`
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
-	hideWindow(cmd)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: 0x08000000}
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{"讀不到裝置清單：" + err.Error()}
