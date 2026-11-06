@@ -564,6 +564,18 @@ WHERE c.active = 1 AND c.refill_days IS NOT NULL
                   WHERE o2.customer_id = c.id AND o2.status IN ('new','dispatched'));
 
 -- =====================================================================
+-- 來電紀錄（來電顯示盒抓到的號碼）
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS call_logs (
+  id          INTEGER PRIMARY KEY,
+  phone       TEXT    NOT NULL,                   -- 只留數字
+  customer_id INTEGER REFERENCES customers(id),   -- 對到的客戶（沒對到是 NULL）
+  source      TEXT    NOT NULL DEFAULT 'box' CHECK (source IN ('box','test')), -- 盒子 / 模擬來電
+  received_at TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs(received_at);
+
+-- =====================================================================
 -- 登入狀態與資料庫版本
 -- =====================================================================
 CREATE TABLE sessions (
@@ -574,4 +586,4 @@ CREATE TABLE sessions (
 );
 
 CREATE TABLE schema_version (version INTEGER NOT NULL);
-INSERT INTO schema_version VALUES (1);
+INSERT INTO schema_version VALUES (2);

@@ -118,6 +118,26 @@ tr.click:hover td { background:var(--bg); }
 dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); padding:18px; width:min(94vw,560px); max-height:90vh; }
 dialog::backdrop { background:rgba(0,0,0,.4); }
 
+/* 來電顯示 */
+#detect { margin:10px 0; padding:10px; border:1px dashed var(--line); border-radius:10px; }
+#detect summary { cursor:pointer; font-weight:600; }
+.callstack { border-color:var(--accent); padding:10px; }
+.callrow { border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:10px; padding:8px 10px; margin-top:8px; cursor:pointer; background:var(--card); font-size:15px; }
+.callrow:hover { background:var(--accent-soft); }
+.callrow.on { background:var(--accent-soft); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+.callrow.done { border-left-color:var(--ok); opacity:.6; }
+.callrow .tel { font-size:17px; font-variant-numeric:tabular-nums; }
+.callrow .x { padding:2px 6px; color:var(--muted); }
+.callrow.flash { animation:flash 1s ease-in-out 3; }
+@keyframes flash { 50% { background:var(--accent-soft); box-shadow:0 0 0 3px var(--accent); } }
+.call-head { display:flex; justify-content:space-between; align-items:center; color:var(--accent); margin:-4px 0 6px; }
+.call-head b { font-size:18px; color:var(--text); font-variant-numeric:tabular-nums; }
+.call-head button { padding:4px 8px; color:var(--muted); }
+.call-name { font-size:24px; font-weight:700; }
+.call-addr { font-size:16px; margin-top:2px; }
+.call-last { background:var(--bg); border-radius:8px; padding:8px 10px; font-size:15px; margin:6px 0; }
+.call-warn { background:var(--bad-soft); color:var(--bad); border-radius:8px; padding:6px 10px; font-size:14px; font-weight:600; margin:6px 0; }
+
 /* 登入 */
 .center { max-width:420px; margin:40px auto; }
 #qr { background:#fff; display:inline-block; padding:8px; border-radius:8px; }

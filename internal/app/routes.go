@@ -82,6 +82,15 @@ func (a *App) Handler() http.Handler {
 
 	m.HandleFunc("GET /api/reports/{name}", a.route(a.report, office...))
 
+	m.HandleFunc("GET /api/calls", a.route(a.listCalls, office...))
+	m.HandleFunc("GET /api/calls/lookup", a.route(a.lookupCaller, office...))
+	m.HandleFunc("POST /api/calls/test", a.route(a.testCall, office...))
+	m.HandleFunc("GET /api/callerid", a.route(a.callerBoxStatus, office...))
+	m.HandleFunc("POST /api/callerid/detect", a.route(a.callerBoxDetect, admin))
+	m.HandleFunc("POST /api/callerid/use", a.route(a.callerBoxUse, admin))
+	m.HandleFunc("GET /api/local/call", a.localCall)
+	m.HandleFunc("POST /api/local/call", a.localCall)
+
 	m.HandleFunc("GET /api/settings", a.route(a.getSettings, office...))
 	m.HandleFunc("PUT /api/settings", a.route(a.putSettings, admin))
 	m.HandleFunc("GET /api/system", a.route(a.systemStatus, office...))
