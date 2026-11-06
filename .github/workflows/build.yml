@@ -40,9 +40,12 @@ jobs:
           VERSION="$(TZ=Asia/Taipei date +%Y.%m.%d.%H%M)-${GITHUB_SHA::7}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H=windowsgui -X main.version=$VERSION" -o dist/gas.exe ./cmd/gas
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/callerid-probe.exe ./cmd/boxprobe
           cp docs/試跑教學.md dist/guide.md
           {
             echo "下載 gas.exe，放到店裡電腦的一個資料夾（例如 C:\\瓦斯行），雙擊執行。教學請看 guide.md。"
+            echo
+            echo "callerid-probe.exe：來電盒偵測小工具，雙擊後照畫面打一通電話進來，結果會存成文字檔。"
             echo
             echo "version: $VERSION"
             echo
@@ -58,5 +61,6 @@ jobs:
           body_path: dist/notes.md
           files: |
             dist/gas.exe
+            dist/callerid-probe.exe
             dist/guide.md
           make_latest: true
