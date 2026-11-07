@@ -74,9 +74,7 @@ func main() {
 	if len(hints.bauds) > 0 {
 		baud = hints.bauds[0]
 	}
-	if len(ports) > 0 {
-		listen(ports, baud)
-	}
+	listen(ports, baud)
 
 	title("結束")
 	say("請把這個檔案傳給 Claude：\r\n%s", name)
@@ -272,6 +270,7 @@ func listen(ports []string, baud int) {
 	for {
 		title(fmt.Sprintf("開始聽（鮑率 %d）", baud))
 		say("現在用手機打一通到店裡電話，響兩三聲就可以掛掉。收到的資料會顯示在下面。")
+		say("（等至少 20 秒、確定有響過再結束；USB 型盒子也會一起聽）")
 		say("・換鮑率：輸入數字後按 Enter（例如 1200、2400、4800、9600、19200）")
 		say("・重新打開 COM 埠：輸入 r 按 Enter（例如關掉原廠軟體之後）")
 		say("・結束：直接按 Enter")
@@ -283,6 +282,24 @@ func listen(ports []string, baud int) {
 				defer wg.Done()
 				listenOne(ctx, p, baud)
 			}(p)
+		}
+		// USB（HID）型的盒子：所有打得開的 HID 裝置都聽
+		for _, hp := range hidPaths() {
+			wg.Add(1)
+			go func(hp string) {
+				defer wg.Done()
+				label := hidLabel(hp)
+				err := readHID(ctx, hp, func() {
+					if isHIDBox(hp) {
+						say("  %s 已打開，等資料中…", label)
+					}
+				}, func(b []byte) { show(label, b) })
+				if isHIDBox(hp) {
+					if err != nil {
+						say("  %s 打不開：%v", label, err)
+					}
+				}
+			}(hp)
 		}
 		c, ok := <-cmds
 		cancel()
@@ -299,6 +316,19 @@ func listen(ports []string, baud int) {
 			say("看不懂「%s」，維持鮑率 %d", c, baud)
 		}
 	}
+}
+
+var vidpidR = regexp.MustCompile(`(?i)vid_([0-9a-f]{4})&pid_([0-9a-f]{4})`)
+
+func hidLabel(p string) string {
+	l := "USB"
+	if m := vidpidR.FindStringSubmatch(p); m != nil {
+		l = "USB " + strings.ToUpper(m[1]+":"+m[2])
+	}
+	if isHIDBox(p) {
+		l += "（很可能是來電盒）"
+	}
+	return l
 }
 
 func listenOne(ctx context.Context, port string, baud int) {
