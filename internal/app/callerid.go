@@ -122,6 +122,11 @@ func (a *App) callerInfo(ctx context.Context, id int64) (map[string]any, error) 
 
 // IncomingCall 有電話打進來（盒子或模擬）。回傳跳出視窗用的資料。
 func (a *App) IncomingCall(ctx context.Context, raw, source string) (map[string]any, error) {
+	return a.IncomingCallLine(ctx, raw, source, "")
+}
+
+// IncomingCallLine 同上，多記是第幾線打進來的（店裡好幾支電話時）。
+func (a *App) IncomingCallLine(ctx context.Context, raw, source, line string) (map[string]any, error) {
 	phone := normalizePhone(raw)
 	if len(phone) < 6 {
 		return nil, bad("號碼太短：" + raw)
@@ -139,12 +144,12 @@ func (a *App) IncomingCall(ctx context.Context, raw, source string) (map[string]
 		return nil, err
 	}
 	callID, _ := res.LastInsertId()
-	call := map[string]any{"id": callID, "phone": phone, "source": source, "matches": matches}
+	call := map[string]any{"id": callID, "phone": phone, "source": source, "line": line, "matches": matches}
 	a.Events.Publish(0, Event{Type: "call", Call: call})
 	if source == "box" && a.ShowWindow != nil {
 		go a.ShowWindow()
 	}
-	log.Printf("來電 %s（%s），對到 %d 位客戶", phone, source, len(matches))
+	log.Printf("來電 %s（%s，第 %s 線），對到 %d 位客戶", phone, source, line, len(matches))
 	return call, nil
 }
 

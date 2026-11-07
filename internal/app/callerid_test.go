@@ -143,3 +143,15 @@ func TestCallerBoxListen(t *testing.T) {
 	}
 	a.box().stopRun()
 }
+
+func TestParseEZ88(t *testing.T) {
+	ph, line := parseBox(ez88Port, []byte("\x00#3,T,D,4922986*\r\n\x00\x00"))
+	if ph != "4922986" || line != "3" {
+		t.Fatal("EZ88 來電沒抓到", ph, line)
+	}
+	for _, s := range []string{"\x00#3,S,B*\r\n", "\x00#4,S,H*\r\n", "\x00#4,S,P*\r\n"} {
+		if ph, _ := parseBox(ez88Port, []byte(s)); ph != "" {
+			t.Fatal("狀態訊息不該當成來電", s, ph)
+		}
+	}
+}

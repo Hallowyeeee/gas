@@ -255,7 +255,7 @@ function callRowHTML(k, active) {
   const c = (k.matches || [])[0];
   const lo = c && c.last_order;
   return `<div class="callrow ${k.state} ${active ? 'on' : ''}" data-call="${k.id}">
-    <div class="row between"><span><b class="tel">${esc(fmtPhone(k.phone))}</b> <span class="muted">${esc(k.at)}</span>${k.source === 'test' ? ' <span class="pill">模擬</span>' : ''}</span>
+    <div class="row between"><span><b class="tel">${esc(fmtPhone(k.phone))}</b> <span class="muted">${esc(k.at)}</span>${k.line ? ` <span class="pill accent">第 ${esc(k.line)} 線</span>` : ''}${k.source === 'test' ? ' <span class="pill">模擬</span>' : ''}</span>
       <button class="ghost x" data-dismiss="${k.id}" title="移除">✕</button></div>
     ${c ? `<div><b>${esc(c.name)}</b>${(k.matches || []).length > 1 ? ` <span class="muted">等 ${k.matches.length} 位</span>` : ''}・<span class="muted">${esc(c.address)}${c.floor ? ' ' + esc(c.floor) : ''}</span></div>
       <div class="row" style="gap:4px;margin-top:4px">

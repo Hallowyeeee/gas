@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -25,7 +26,30 @@ var (
 	serialPorts = serialport.Ports
 	serialOpen  = serialport.Open
 	usbDevices  = serialport.Devices
+	hidPaths    = serialport.HIDPaths
+	hidOpen     = serialport.OpenHID
 )
+
+// EZ88（捷程）來電盒：USB 裝置 VID 0416 / PID 5020，送出像「#3,T,D,4922986*」的文字
+// （#線號,T=來電號碼,D,號碼*）；「#3,S,B*」「#3,S,H*」「#3,S,P*」是線路狀態。
+const (
+	ez88Port  = "EZ88"
+	ez88Match = "vid_0416&pid_5020"
+)
+
+var ez88Call = regexp.MustCompile(`#(\d+),T,[A-Z],([0-9]+)\*`)
+
+// openBox 打開盒子：EZ88 走 USB，其他是 COM 埠。
+func openBox(port string, baud int) (io.ReadCloser, error) {
+	if port == ez88Port {
+		paths := hidPaths(ez88Match)
+		if len(paths) == 0 {
+			return nil, fmt.Errorf("沒看到 EZ88 來電盒（USB 線有插好嗎？）")
+		}
+		return hidOpen(paths[0])
+	}
+	return serialOpen(port, baud)
+}
 
 type boxChunk struct {
 	At    string `json:"at"`
@@ -33,6 +57,7 @@ type boxChunk struct {
 	Text  string `json:"text"`  // 看得懂的字（看不懂的變成 ·）
 	Hex   string `json:"hex"`   // 原始位元組
 	Phone string `json:"phone"` // 從裡面抓到的號碼
+	Line  string `json:"line,omitempty"`
 }
 
 type detectPort struct {
@@ -111,7 +136,10 @@ func (b *CallerBox) restart() {
 	b.stopRun()
 	port, baud := b.settings()
 	if port == "" {
-		b.setStatus("還沒設定盒子")
+		port = ez88Port // 沒設定就自動找 EZ88
+	}
+	if port == "off" {
+		b.setStatus("來電顯示盒已關閉")
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -129,13 +157,13 @@ func (b *CallerBox) restart() {
 // listen 一直讀某個 COM 埠；斷了就每 5 秒重試。detect = true 時讀到期限就結束、不跳來電。
 func (b *CallerBox) listen(ctx context.Context, port string, baud int, detect bool) {
 	for ctx.Err() == nil {
-		p, err := serialOpen(port, baud)
+		p, err := openBox(port, baud)
 		if err != nil {
 			if detect {
 				b.detectErr(port, err)
 				return
 			}
-			b.setStatus(fmt.Sprintf("連不上 %s：%v（5 秒後重試）", port, err))
+			b.setStatus(fmt.Sprintf("連不上 %s：%v（5 秒後再找一次）", boxName(port), err))
 			select {
 			case <-ctx.Done():
 				return
@@ -144,7 +172,7 @@ func (b *CallerBox) listen(ctx context.Context, port string, baud int, detect bo
 			continue
 		}
 		if !detect {
-			b.setStatus(fmt.Sprintf("已連上 %s（%d），等電話中", port, baud))
+			b.setStatus(fmt.Sprintf("已連上 %s，等電話中", boxName(port)))
 			log.Println("來電顯示盒已連上", port, baud)
 		}
 		b.readLoop(ctx, p, port, detect)
@@ -183,7 +211,7 @@ func (b *CallerBox) readLoop(ctx context.Context, p io.Reader, port string, dete
 			}
 		}
 		// 一段資料：遇到換行，或停了 300 毫秒，就當作一筆
-		if len(pending) > 0 && (n == 0 || time.Since(lastData) > 300*time.Millisecond || len(pending) > 256) {
+		if len(pending) > 0 && (n == 0 || bytes.IndexByte(pending, '\n') >= 0 || time.Since(lastData) > 300*time.Millisecond || len(pending) > 256) {
 			b.handleChunk(port, pending, detect)
 			pending = nil
 		}
@@ -200,8 +228,31 @@ func (b *CallerBox) readLoop(ctx context.Context, p io.Reader, port string, dete
 	}
 }
 
+func boxName(port string) string {
+	if port == ez88Port {
+		return "EZ88 來電盒（USB）"
+	}
+	return port
+}
+
+// parseBox 從一包資料抓出號碼和線號。
+func parseBox(port string, data []byte) (phone, line string) {
+	data = bytes.Trim(data, "\x00")
+	if m := ez88Call.FindSubmatch(data); m != nil {
+		return string(m[2]), string(m[1])
+	}
+	if port == ez88Port || bytes.HasPrefix(data, []byte("#")) {
+		return "", "" // EZ88 的狀態訊息，不是來電
+	}
+	return extractPhone(data), ""
+}
+
 func (b *CallerBox) handleChunk(port string, data []byte, detect bool) {
-	c := boxChunk{At: time.Now().Format("15:04:05"), Port: port, Text: printable(data), Hex: spacedHex(data), Phone: extractPhone(data)}
+	if t := bytes.TrimRight(data, "\x00"); len(t) > 0 {
+		data = t // HID 每包固定 65 個位元組，後面補 0
+	}
+	phone, line := parseBox(port, data)
+	c := boxChunk{At: time.Now().Format("15:04:05"), Port: port, Text: printable(data), Hex: spacedHex(data), Phone: phone, Line: line}
 	b.mu.Lock()
 	b.recent = append([]boxChunk{c}, b.recent...)
 	if len(b.recent) > 50 {
@@ -216,7 +267,7 @@ func (b *CallerBox) handleChunk(port string, data []byte, detect bool) {
 	if detect || c.Phone == "" || dup {
 		return
 	}
-	if _, err := b.app.IncomingCall(context.Background(), c.Phone, "box"); err != nil {
+	if _, err := b.app.IncomingCallLine(context.Background(), c.Phone, "box", c.Line); err != nil {
 		log.Println("來電處理失敗:", err)
 	}
 }
@@ -238,6 +289,9 @@ func (b *CallerBox) startDetect(baud int) {
 	b.stopRun()
 
 	ports := serialPorts()
+	if len(hidPaths(ez88Match)) > 0 {
+		ports = append([]string{ez88Port}, ports...)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	r := &boxRun{cancel: cancel}
 	b.mu.Lock()
@@ -347,7 +401,11 @@ func spacedHex(b []byte) string {
 
 func (a *App) callerBoxStatus(r *http.Request, u *User) (any, error) {
 	s := a.box().snapshot()
-	s["ports"] = serialPorts()
+	ports := serialPorts()
+	if len(hidPaths(ez88Match)) > 0 {
+		ports = append([]string{ez88Port}, ports...)
+	}
+	s["ports"] = ports
 	return s, nil
 }
 
