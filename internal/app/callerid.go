@@ -43,23 +43,42 @@ func samePhone(a, b string) bool {
 
 // findCallers 找出電話對得上的客戶（可能不只一位，例如同一家店兩個人）。
 func (a *App) findCallers(ctx context.Context, phone string) ([]map[string]any, error) {
-	list, err := rows(ctx, a.DB, `SELECT id, phone, phone2 FROM customers WHERE active = 1 AND (phone IS NOT NULL OR phone2 IS NOT NULL)`)
+	// 主要號碼＋「其他電話」卡片裡的每一支
+	list, err := rows(ctx, a.DB, `SELECT id, phone FROM customers WHERE active = 1 AND phone IS NOT NULL
+		UNION ALL
+		SELECT c.id, p.phone FROM customer_phones p JOIN customers c ON c.id = p.customer_id WHERE c.active = 1`)
 	if err != nil {
 		return nil, err
 	}
-	var exact, loose []int64
+	// 每位客戶取最好的對法：完全一樣 > 尾數一樣；照第一次出現的順序
+	level := map[int64]int{}
+	var order []int64
 	for _, c := range list {
-		for _, k := range []string{"phone", "phone2"} {
-			p, _ := c[k].(string)
-			n := normalizePhone(p)
-			if n == phone && n != "" {
-				exact = append(exact, c["id"].(int64))
-				break
-			}
-			if samePhone(n, phone) {
-				loose = append(loose, c["id"].(int64))
-				break
-			}
+		id := c["id"].(int64)
+		p, _ := c["phone"].(string)
+		n := normalizePhone(p)
+		lv := 0
+		if n == phone && n != "" {
+			lv = 2
+		} else if samePhone(n, phone) {
+			lv = 1
+		}
+		if lv == 0 {
+			continue
+		}
+		if _, ok := level[id]; !ok {
+			order = append(order, id)
+		}
+		if lv > level[id] {
+			level[id] = lv
+		}
+	}
+	var exact, loose []int64
+	for _, id := range order {
+		if level[id] == 2 {
+			exact = append(exact, id)
+		} else {
+			loose = append(loose, id)
 		}
 	}
 	ids := exact

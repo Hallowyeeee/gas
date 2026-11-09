@@ -41,6 +41,9 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/customers/{id}", a.route(a.getCustomer, office...))
 	m.HandleFunc("PUT /api/customers/{id}", a.route(a.updateCustomer, office...))
 	m.HandleFunc("PUT /api/customers/{id}/prices", a.route(a.setCustomerPrice, office...))
+	m.HandleFunc("POST /api/customers/{id}/phones", a.route(a.addCustomerPhone, office...))
+	m.HandleFunc("DELETE /api/customers/{id}/phones/{pid}", a.route(a.deleteCustomerPhone, office...))
+	m.HandleFunc("POST /api/customers/{id}/phones/{pid}/main", a.route(a.mainCustomerPhone, office...))
 
 	m.HandleFunc("GET /api/products", a.route(a.listProducts)) // 師傅回報押瓶時要選鋼瓶
 	m.HandleFunc("POST /api/products", a.route(a.createProduct, office...))

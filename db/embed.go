@@ -10,3 +10,8 @@ var Schema string
 //
 //go:embed legacy.sql
 var Legacy string
+
+// Phones 是第 4 版：一位客戶可以有很多支電話。
+//
+//go:embed phones.sql
+var Phones string
