@@ -776,7 +776,13 @@ function all(w,o){try{if(w.document&&w.document.body)o.push(w.document)}catch(e)
 function has(d){try{return /客戶編號/.test(d.body.innerText||d.body.textContent||'')}catch(e){return false}}
 function md(){var ds=all(window.top,[]);for(var i=0;i<ds.length;i++)if(has(ds[i]))return ds[i];try{var f=window.top.frames.main;if(f&&f.document&&f.document.body)return f.document}catch(e){}return document}
 function tip(m,ok){try{var d=md(),b=d.createElement('div');b.textContent=m;b.style.cssText='position:fixed;z-index:2147483647;right:16px;top:16px;max-width:480px;padding:12px 18px;border-radius:8px;font:bold 18px sans-serif;color:#fff;background:'+(ok?'#2b8a3e':'#c92a2a')+';box-shadow:0 4px 16px rgba(0,0,0,.3)';d.body.appendChild(b);setTimeout(function(){b.remove()},ok?2500:7000)}catch(e){alert(m)}}
-function send(){var ds=all(window.top,[]),best=md(),live=has(best),list=live?[best]:ds,x=Math.max(0,(screen.availWidth||1200)-460),w=window.open('','gascap','width=460,height=220,left='+x+',top=40');if(!w){tip('✗ 小視窗被擋住了：請按網址列右邊的「已封鎖彈出式視窗」圖示，選「一律允許」，再按一次 F12');return}var d=best,f=d.createElement('form');f.method='POST';f.action=U;f.target='gascap';f.acceptCharset='UTF-8';f.style.display='none';var add=function(k,v){var i=d.createElement('textarea');i.name=k;i.value=v;f.appendChild(i)};add('enc','uri');var sn=t.__gasSnap;if(!live&&sn){add('url',sn.u);add('title',sn.ti);add('html',encodeURIComponent(sn.h))}list.forEach(function(x){add('url',x.location.href);add('title',x.title||'');add('html',encodeURIComponent(x.documentElement.outerHTML))});d.body.appendChild(f);f.submit();f.remove()}
+function rows(h){var m=h.match(/\\d{4}\\/\\d{1,2}\\/\\d{1,2}[\\s\\S]{0,700}?\\d{1,2}:\\d{2}:\\d{2}/g)||[];return m.map(function(x){return x.replace(/<[^>]*>|\\s+/g,'')})}
+function get(w,u){return new Promise(function(ok){try{var x=new w.XMLHttpRequest();x.open('GET',u,true);x.onload=function(){ok(x.status==200?x.responseText:'')};x.onerror=function(){ok('')};x.send()}catch(e){ok('')}})}
+function pages(d,pw,done){var w=d.defaultView,q='';try{q=w.str}catch(e){}if(!q||!/customer_id=/.test(q)){var m=/customer_id=(\\d+)/.exec(d.location.href)||[];try{m[1]=m[1]||w.customer_id}catch(e){}if(!m[1])return done([]);q='customer_id='+m[1]+'&plankey=N'}var base=new URL('gas_record.asp',d.location.href).href+'?'+q,seen={},out=[],n=0;rows(d.documentElement.outerHTML).forEach(function(k){seen[k]=1});
+function batch(from){var ps=[];for(var p=from;p<from+10;p++)ps.push(get(w,base+'&page='+p+'&key=&_='+Date.now()));Promise.all(ps).then(function(hs){var last=0;hs.forEach(function(h){var add=0;rows(h).forEach(function(k){if(!seen[k]){seen[k]=1;add++}});if(add){out.push(h);n++}last=add});try{pw.document.body.innerHTML='<div style="font:bold 20px sans-serif;padding:24px">抓取中… 已多抓 '+n+' 頁</div>'}catch(e){}if(last&&from<200)batch(from+10);else done(out)})}batch(1)}
+function send(){var ds=all(window.top,[]),best=md(),live=has(best),list=live?[best]:ds,x=Math.max(0,(screen.availWidth||1200)-460),w=window.open('','gascap','width=460,height=220,left='+x+',top=40');if(!w){tip('✗ 小視窗被擋住了：請按網址列右邊的「已封鎖彈出式視窗」圖示，選「一律允許」，再按一次 F12');return}try{w.document.body.innerHTML='<div style="font:bold 20px sans-serif;padding:24px">抓取中…</div>'}catch(e){}
+var go=function(extra){var d=best,f=d.createElement('form');f.method='POST';f.action=U;f.target='gascap';f.acceptCharset='UTF-8';f.style.display='none';var add=function(k,v){var i=d.createElement('textarea');i.name=k;i.value=v;f.appendChild(i)};add('enc','uri');var sn=t.__gasSnap;if(!live&&sn){add('url',sn.u);add('title',sn.ti);add('html',encodeURIComponent(sn.h+extra))}list.forEach(function(x){add('url',x.location.href);add('title',x.title||'');add('html',encodeURIComponent(x.documentElement.outerHTML+(x===best?extra:'')))});d.body.appendChild(f);f.submit();f.remove()};
+if(!live)return go('');pages(best,w,function(hs){go(hs.length?'<div id="gas-more-pages">'+hs.join('')+'</div>':'')})}
 function key(e){if(e.key==='F12'||e.keyCode===123){e.preventDefault();e.stopPropagation();send()}}
 var t=window.top;
 function arm(w){try{var k=t.__gasKey;if(w.__gasK!==k){if(w.__gasK)w.removeEventListener('keydown',w.__gasK,true);w.__gasK=k;w.addEventListener('keydown',k,true)}}catch(e){}try{for(var i=0;i<w.frames.length;i++)arm(w.frames[i])}catch(e){}}
@@ -792,11 +798,11 @@ async function legacySettingsCard() {
   return `<div class="card" id="legacyCard"><h3 style="margin-top:0">📥 從舊系統抓客戶資料（F12）</h3>
     <ol class="steps">
       <li>用 Chrome 開舊系統。按 <b>Ctrl+Shift+B</b> 打開書籤列。</li>
-      <li>把這個按鈕<b>拖到書籤列</b>上：<a class="btn primary" id="bm" href="${esc(bookmarkletCode())}" onclick="event.preventDefault();toast('請用拖的，把它拖到 Chrome 的書籤列')">📥 抓到瓦斯行</a>
+      <li>把這個按鈕<b>拖到書籤列</b>上：<a class="btn primary" id="bm" href="${esc(bookmarkletCode())}" onclick="event.preventDefault();toast('請用拖的，把它拖到 Chrome 的書籤列')">🔨小工具</a>
         <button type="button" id="bmCopy">拖不過去？複製</button></li>
-      <li>每次登入舊系統後，點一下書籤列的「📥 抓到瓦斯行」。之後在客戶頁按 <b>F12</b>，這裡就會跳出確認視窗，按 <b>Enter</b> 存、<b>Esc</b> 不存。</li>
+      <li>每次登入舊系統後，點一下書籤列的「🔨小工具」。之後在客戶頁按 <b>F12</b>，這裡就會跳出確認視窗，按 <b>Enter</b> 存、<b>Esc</b> 不存。</li>
     </ol>
-    <p class="muted">按 F12 時右上角會閃一個小視窗顯示「✓ 已送到瓦斯行」再自己關掉。第一次如果 Chrome 說「已封鎖彈出式視窗」，請按網址列右邊那個圖示選<b>一律允許</b>。拖不過去的話：按「複製」，在書籤列按右鍵 →「新增網頁」，名稱打「抓到瓦斯行」，網址貼上。</p>
+    <p class="muted">按 F12 時右上角會閃一個小視窗顯示「✓ 已送到瓦斯行」再自己關掉。第一次如果 Chrome 說「已封鎖彈出式視窗」，請按網址列右邊那個圖示選<b>一律允許</b>。拖不過去的話：按「複製」，在書籤列按右鍵 →「新增網頁」，名稱打「🔨小工具」，網址貼上。</p>
     <div class="row"><label style="margin:0">或上傳 Ctrl+S 存下來的網頁檔（gas_record.html）：</label><input type="file" id="capFile" accept=".htm,.html" style="width:auto"></div>
     <p class="muted">已存 ${saved.length >= 200 ? '200+' : saved.length} 位${pending.length ? `，<a href="javascript:" id="capPending">待確認 ${pending.length} 筆</a>` : ''}</p></div>`;
 }

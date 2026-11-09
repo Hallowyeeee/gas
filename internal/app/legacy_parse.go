@@ -172,11 +172,16 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 	}
 
 	// 3. 送貨紀錄、出桶鋼瓶（先找標題列，再讀下面的資料列）
+	// 多抓回來的其他頁可能沒有標題列，就沿用上一個送貨紀錄的標題。
+	var lastHead map[string]int
+	var lastHeads []string
+	var lastSizeCols []int
+	seenDelivery := map[string]bool{}
 	for _, t := range tables {
-		var head map[string]int
-		var kind string
-		var sizeCols []int
-		var heads []string
+		head, kind, heads, sizeCols := lastHead, "", lastHeads, lastSizeCols
+		if head != nil {
+			kind = "delivery"
+		}
 		for _, tr := range tableRows(t) {
 			cells := rowCells(tr)
 			texts := make([]string, len(cells))
@@ -190,6 +195,7 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 						sizeCols = append(sizeCols, i)
 					}
 				}
+				lastHead, lastHeads, lastSizeCols = head, heads, sizeCols
 				continue
 			}
 			if len(texts) >= 4 && contains(texts, "條碼") && contains(texts, "規格") && contains(texts, "編號") {
@@ -230,6 +236,12 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 				d.Driver = get("送貨員")
 				d.Position = get("位置")
 				d.Note = get("備註")
+				// 同一筆在不同頁重複出現只算一次
+				key := d.At
+				if seenDelivery[key] {
+					continue
+				}
+				seenDelivery[key] = true
 				if sum, ok := itemsSum(d.Items); ok && sum != d.Amount && d.StoredGas == 0 {
 					p.Warnings = append(p.Warnings, fmt.Sprintf("%s 金額 %d 跟 數量×單價 %d 不一樣", d.At[:10], d.Amount, sum))
 				}

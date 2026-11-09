@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -78,5 +79,33 @@ func TestLegacyHelpers(t *testing.T) {
 	}
 	if d := rocDate("116-02-21"); d != "2027-02-21" {
 		t.Errorf("民國 %q", d)
+	}
+}
+
+// F12 多抓回來的其他頁接在後面：沒有標題列也讀得到，重複的不算
+func TestParseLegacyMorePages(t *testing.T) {
+	b, err := os.ReadFile("testdata/easy88_order_form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func(day, tm, qty string) string {
+		return `<tr><td><a><font>` + day + `</font></a></td><td><a>` + tm + `</a></td><td></td><td></td><td></td><td>` + qty + `</td><td></td><td></td><td></td><td>0</td><td>680</td><td></td><td>已付款</td><td>師傅丙</td><td></td><td>第二頁</td></tr>`
+	}
+	more := `<div id="gas-more-pages"><table>` +
+		row("2023/08/01", "10:00:00", "1 (680)") +
+		row("2023/07/01", "10:00:00", "1 (680)") +
+		row("2026/10/21", "15:29:31", "1 (770)") + // 第一頁已經有
+		`</table></div>`
+	src := strings.Replace(string(b), "</body>", more+"</body>", 1)
+	p, err := ParseLegacyPage(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Deliveries) != 35 {
+		t.Fatalf("應該 33+2 筆，結果 %d", len(p.Deliveries))
+	}
+	last := p.Deliveries[len(p.Deliveries)-1]
+	if last.At != "2023-07-01 10:00:00" || last.Note != "第二頁" || last.ItemsText() != "20kg×1(680)" {
+		t.Fatalf("第二頁讀錯：%+v", last)
 	}
 }
