@@ -159,3 +159,5 @@ dialog.capdlg { width:min(96vw,760px); }
 .cust-name { font-size:30px; font-weight:700; }
 .cust-code { font-size:18px; color:var(--muted, #666); }
 .phone-cell { grid-column: span 2; } .phone-cell input { min-width:0; flex:1; }
+.check-box { display:flex; align-items:center; gap:8px; color:var(--text); font-size:16px; min-height:42px; margin:0; }
+.check-box input { width:20px; height:20px; }

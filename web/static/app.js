@@ -129,7 +129,7 @@ function lineText(o) {
     o.phone ? `電話：${o.phone}` : '',
     `地址：${where}`,
     items ? `品項：${items}` : '',
-    o.billing_type === 'monthly' ? `金額：${money(o.total_amount)}（月結，不用收錢）` : `收款：${money(o.total_amount)}`,
+    o.billing_type === 'monthly' ? `金額：${money(o.total_amount)}（月結，不用收錢）` : `收款：${money(o.total_amount)}${o.pay_method === 'transfer' ? '（轉帳，不用收現金）' : ''}`,
     o.note ? `備註：${o.note}` : '',
     o.address ? `地圖：https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}` : '',
   ].filter(Boolean).join('\n');
@@ -435,7 +435,7 @@ function orderCard(o, drivers) {
     <div class="row between"><span class="title">${esc(o.customer_name)}</span><span class="money">${money(o.total_amount)}</span></div>
     <div class="addr">${esc(o.address)}${o.floor ? '・' + esc(o.floor) : ''}${o.has_elevator === 0 ? '・無電梯' : ''}</div>
     <div class="row"><span class="grow">${esc(o.summary || '')}</span>
-      ${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}${paid}
+      ${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : ''}${paid}
       <span class="muted">${o.status === 'delivered' ? '送達 ' + hhmm(o.delivered_at) : hhmm(o.ordered_at)}${o.driver_name && o.status !== 'new' ? '・' + esc(o.driver_name) : ''}</span></div>
     ${o.note ? `<div class="muted">📝 ${esc(o.note)}</div>` : ''}
     <div class="actions">${actions}</div></div>`;
@@ -477,7 +477,7 @@ async function orderDetail(view, id) {
   view.innerHTML = `<p><a href="#/orders">← 回訂單</a></p>
     <div class="card"><div class="row between"><h2 style="margin:0">${esc(o.order_no)}　${esc(o.customer_name)}</h2>
       <span class="pill ${o.status === 'delivered' ? 'ok' : o.status === 'cancelled' ? 'bad' : 'accent'}">${STATUS[o.status]}</span></div>
-      <p>${esc(o.address)}　${esc(o.phone || '')}　${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : '現結'}
+      <p>${esc(o.address)}　${esc(o.phone || '')}　${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : '現結・' + (o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : '現金')}
       ${o.needs_invoice ? `<span class="pill">開發票 ${esc(o.tax_id || '')}</span>` : ''}</p>
       <div class="table-wrap"><table><tr><th>商品</th><th class="num">數量</th><th class="num">單價</th><th class="num">折扣</th><th class="num">金額</th><th class="num">回收空瓶</th></tr>
       ${o.items.map(i => `<tr><td>${esc(i.product_name)}</td><td class="num">${i.qty}</td><td class="num">${money(i.unit_price)}</td><td class="num">${i.discount ? money(i.discount) : ''}</td><td class="num">${money(i.amount)}</td><td class="num">${i.empties_returned || ''}</td></tr>`).join('')}
@@ -605,6 +605,7 @@ async function officeNew(view) {
       ${c.last_order ? `<div class="call-last">上次 <b>${c.last_order.days_ago <= 0 ? '今天' : c.last_order.days_ago + ' 天前'}</b>：${esc(c.last_order.items || '')}・${money(c.last_order.total_amount)}${c.last_order.driver_name ? '・' + esc(c.last_order.driver_name) + ' 送' : ''}</div>` : ''}
       <h3>瓦斯</h3><div class="quick">${gas.map(qbox).join('') || '<div class="muted">還沒有瓦斯商品，請到「商品」新增</div>'}</div>
       ${others.length ? `<h3>其他商品</h3><div class="quick">${others.map(qbox).join('')}</div>` : ''}
+      ${c.billing_type === 'monthly' ? '' : `<label>付款方式</label><div class="segment" id="pay"><button type="button" class="on" data-m="cash">現金</button><button type="button" data-m="transfer">轉帳</button></div>`}
       <label>備註（給師傅看）</label><input id="note" placeholder="例如：放後門、下午 3 點後">
       <div class="total-bar"><span>合計</span><span id="total">${money(0)}</span></div>
       <label>派給</label><div class="row" id="drivers">${drivers.map(d => `<button data-d="${d.id}" ${def && def.id === d.id ? 'class="primary"' : ''}>${esc(d.name)}</button>`).join('')}<button data-d="">先不派</button></div>
@@ -619,6 +620,7 @@ async function officeNew(view) {
         if (!st.qty[pid]) delete st.qty[pid];
         syncQty();
       }
+      if (b.dataset.m) $$('#pay button').forEach(x => x.classList.toggle('on', x === b));
       if ('d' in b.dataset) { st.driver = b.dataset.d ? +b.dataset.d : null; $$('#drivers button').forEach(x => x.classList.toggle('primary', x === b)); }
       if (b.id === 'create') create();
     };
@@ -643,6 +645,7 @@ async function officeNew(view) {
     const items = Object.entries(st.qty).map(([pid, qty]) => ({ product_id: +pid, qty }));
     if (!items.length) return toast('請選商品數量', 'bad');
     const body = { customer_id: st.customer.id, items, note: $('#note').value || null };
+    const pay = $('#pay .on'); if (pay) body.pay_method = pay.dataset.m;
     if (st.driver) body.driver_id = st.driver;
     const btn = $('#create'); btn.disabled = true;
     try {
@@ -850,7 +853,7 @@ function customerFormHTML(c, drivers) {
   return `<div class="form-grid">${CUSTOMER_FORM.map(([k, t, type]) => k === 'phone'
       ? `<div class="phone-cell"><label>${t}</label><div class="row" style="flex-wrap:nowrap"><input name="phone" value="${esc(c.phone ?? '')}">${phoneCard}</div></div>`
       : `<div><label>${t}</label><input name="${k}" type="${type || 'text'}" value="${esc(c[k] ?? '')}"></div>`).join('')}
-    <div><label>結帳方式</label><select name="billing_type"><option value="cash">現結</option><option value="monthly" ${c.billing_type === 'monthly' ? 'selected' : ''}>月結</option></select></div>
+    <div><label>結帳方式 <span class="muted">（沒勾＝現結）</span></label><label class="check-box"><input type="checkbox" name="monthly_box" ${c.billing_type === 'monthly' ? 'checked' : ''}>月結客戶</label></div>
     <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
     <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div></div>
     <label>備註</label><textarea name="note">${esc(c.note || '')}</textarea>`;
@@ -860,6 +863,7 @@ function readCustomerForm(form) {
   // 統一編號或發票抬頭有填，就是要開發票
   f.tax_id = f.tax_id.trim() || null; f.invoice_title = f.invoice_title.trim() || null;
   f.needs_invoice = !!(f.tax_id || f.invoice_title);
+  f.billing_type = form.monthly_box.checked ? 'monthly' : 'cash'; delete f.monthly_box;
   return f;
 }
 async function customerDialog(c, done) {
@@ -1133,7 +1137,8 @@ function deliverForm(o, empties) {
   const due = o.billing_type === 'monthly' ? 0 : o.total_amount - (o.paid_amount || 0);
   return `<label>收了多少錢</label><input id="amt" type="number" inputmode="numeric" value="${due}" style="font-size:24px;font-weight:700">
     ${o.billing_type === 'monthly' ? '<div class="muted">月結客戶，通常不用收錢</div>' : ''}
-    <div class="segment" id="method"><button type="button" class="on" data-m="cash">現金</button><button type="button" data-m="transfer">轉帳</button></div>
+    ${o.pay_method === 'transfer' ? '<div class="call-warn">記單時說要轉帳</div>' : ''}
+    <div class="segment" id="method"><button type="button" ${o.pay_method === 'transfer' ? '' : 'class="on"'} data-m="cash">現金</button><button type="button" ${o.pay_method === 'transfer' ? 'class="on"' : ''} data-m="transfer">轉帳</button></div>
     ${(o.items || []).filter(i => i.empty_product_id).map(i => `<label>${esc(i.product_name)} 回收空瓶</label>
       <input type="number" inputmode="numeric" data-item="${i.id}" value="${i.empties_returned || i.qty}">`).join('')}
     ${empties.length ? `<details style="margin-top:12px"><summary>押瓶（借鋼瓶收押金）</summary>
@@ -1178,7 +1183,7 @@ async function driverJobs(view) {
     ${!('PushManager' in window) && /iPhone|iPad/.test(navigator.userAgent) ? '<div class="card muted">iPhone 要先按 Safari 下方「分享」→「加入主畫面」，從主畫面打開才能收到通知。</div>' : ''}
     <h2>我的單 <span class="pill accent">${list.length}</span></h2>
     ${list.map(o => `<div class="job">
-      <div class="row between"><span class="name">${esc(o.customer_name)}</span><span class="big">${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : money(o.total_amount)}</span></div>
+      <div class="row between"><span class="name">${esc(o.customer_name)}</span><span class="big">${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : money(o.total_amount) + (o.pay_method === 'transfer' ? ' <span class="pill blue">轉帳</span>' : '')}</span></div>
       <div class="addr">${esc(o.address)}${o.floor ? '・' + esc(o.floor) : ''}${o.has_elevator === 0 ? '・<b>無電梯</b>' : ''}</div>
       <div>${esc(o.summary || '')}</div>
       ${o.note ? `<div class="muted">📝 ${esc(o.note)}</div>` : ''}
@@ -1204,7 +1209,7 @@ async function driverDeliver(view, id) {
   if (o.status !== 'dispatched') { view.innerHTML = `<div class="card">這張單目前是「${STATUS[o.status]}」。<a href="#/my">回我的單</a></div>`; return; }
   view.innerHTML = `<p><a href="#/my">← 回我的單</a></p><div class="job"><div class="name">${esc(o.customer_name)}</div><div class="addr">${esc(o.address)}</div>
     <div>${(o.items || []).map(i => `${esc(i.product_name)} × ${i.qty}`).join('、') || esc(o.summary || '')}</div>
-    <div class="big" style="margin-top:6px">應收 ${o.billing_type === 'monthly' ? '0（月結）' : money(o.total_amount)}</div></div>
+    <div class="big" style="margin-top:6px">應收 ${o.billing_type === 'monthly' ? '0（月結）' : money(o.total_amount) + (o.pay_method === 'transfer' ? '（轉帳）' : '')}</div></div>
     <form class="card" id="f">${deliverForm(o, products.filter(p => p.category === 'empty_cylinder'))}
     <p><button class="ok lg">確認送達</button></p></form>`;
   bindSegment(view);

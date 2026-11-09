@@ -26,6 +26,17 @@ type orderIn struct {
 	NeedsInvoice *bool    `json:"needs_invoice"`
 	InvoiceNo    *string  `json:"invoice_no"`
 	BillingType  *string  `json:"billing_type"`
+	PayMethod    *string  `json:"pay_method"` // 現金 cash／轉帳 transfer
+}
+
+func payMethod(p *string) (string, error) {
+	if p == nil || *p == "" {
+		return "cash", nil
+	}
+	if *p != "cash" && *p != "transfer" {
+		return "", bad("付款方式只能是現金或轉帳")
+	}
+	return *p, nil
 }
 
 func (a *App) nextOrderNo(ctx context.Context, tx *sql.Tx) (string, error) {
@@ -110,12 +121,16 @@ func (a *App) createOrder(r *http.Request, u *User) (any, error) {
 			needsInv = 1
 		}
 	}
+	pay, err := payMethod(in.PayMethod)
+	if err != nil {
+		return nil, err
+	}
 	no, err := a.nextOrderNo(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO orders (order_no, customer_id, billing_type, address, phone, needs_invoice, tax_id, note, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, no, in.CustomerID, billing, addr, phone, needsInv, taxID, in.Note, u.ID)
+	res, err := tx.ExecContext(ctx, `INSERT INTO orders (order_no, customer_id, billing_type, address, phone, needs_invoice, tax_id, note, pay_method, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, no, in.CustomerID, billing, addr, phone, needsInv, taxID, in.Note, pay, u.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +213,7 @@ func (a *App) listOrders(r *http.Request, u *User) (any, error) {
 	}
 	return rows(r.Context(), a.DB, `
 		SELECT o.id, o.order_no, o.customer_id, c.name AS customer_name, o.address, o.phone, c.floor, c.has_elevator,
-		       o.status, o.billing_type, o.driver_id, u.name AS driver_name, o.total_amount, o.note,
+		       o.status, o.billing_type, o.pay_method, o.driver_id, u.name AS driver_name, o.total_amount, o.note,
 		       o.ordered_at, o.dispatched_at, o.delivered_at,
 		       COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0) AS paid_amount,
 		       (SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary
@@ -246,6 +261,13 @@ func (a *App) updateOrder(r *http.Request, u *User) (any, error) {
 	}
 	if in.NeedsInvoice != nil {
 		f["needs_invoice"] = map[bool]int64{true: 1, false: 0}[*in.NeedsInvoice]
+	}
+	if in.PayMethod != nil {
+		pay, err := payMethod(in.PayMethod)
+		if err != nil {
+			return nil, err
+		}
+		f["pay_method"] = pay
 	}
 	if in.BillingType != nil {
 		if status == "delivered" {
