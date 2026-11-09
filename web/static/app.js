@@ -843,24 +843,23 @@ async function customerList(view) {
 }
 
 const CUSTOMER_FORM = [
-  ['name', '名字 *'], ['phone', '電話'], ['address', '地址 *'], ['floor', '樓層'], ['area', '區域'],
-  ['code', '客戶編號'], ['refill_days', '大約幾天換一次瓶', 'number'], ['tax_id', '統一編號'], ['invoice_title', '發票抬頭'],
+  ['code', '客戶編號'], ['name', '名字 *'], ['phone', '電話'], ['address', '地址 *'],
 ];
 function customerFormHTML(c, drivers) {
   const phoneCard = c.id ? `<button type="button" class="ghost phone-card" id="morePhones">其他電話（${(c.phones || []).length}）</button>` : '';
   return `<div class="form-grid">${CUSTOMER_FORM.map(([k, t, type]) => k === 'phone'
-      ? `<div><label>${t}</label><div class="row" style="flex-wrap:nowrap"><input name="phone" value="${esc(c.phone ?? '')}">${phoneCard}</div></div>`
+      ? `<div class="phone-cell"><label>${t}</label><div class="row" style="flex-wrap:nowrap"><input name="phone" value="${esc(c.phone ?? '')}">${phoneCard}</div></div>`
       : `<div><label>${t}</label><input name="${k}" type="${type || 'text'}" value="${esc(c[k] ?? '')}"></div>`).join('')}
     <div><label>結帳方式</label><select name="billing_type"><option value="cash">現結</option><option value="monthly" ${c.billing_type === 'monthly' ? 'selected' : ''}>月結</option></select></div>
-    <div><label>電梯</label><select name="has_elevator"><option value="">不確定</option><option value="1" ${c.has_elevator === 1 ? 'selected' : ''}>有電梯</option><option value="0" ${c.has_elevator === 0 ? 'selected' : ''}>沒有電梯</option></select></div>
-    <div><label>固定師傅</label><select name="default_driver_id"><option value="">不指定</option>${drivers.map(d => `<option value="${d.id}" ${c.default_driver_id === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
-    <div><label>&nbsp;</label><label style="color:var(--text)"><input type="checkbox" name="needs_invoice" ${c.needs_invoice ? 'checked' : ''}>要開發票</label></div></div>
+    <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
+    <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div></div>
     <label>備註</label><textarea name="note">${esc(c.note || '')}</textarea>`;
 }
 function readCustomerForm(form) {
   const f = Object.fromEntries(new FormData(form));
-  f.needs_invoice = form.needs_invoice.checked;
-  for (const k of ['refill_days', 'default_driver_id', 'has_elevator']) f[k] = f[k] === '' ? null : +f[k];
+  // 統一編號或發票抬頭有填，就是要開發票
+  f.tax_id = f.tax_id.trim() || null; f.invoice_title = f.invoice_title.trim() || null;
+  f.needs_invoice = !!(f.tax_id || f.invoice_title);
   return f;
 }
 async function customerDialog(c, done) {
@@ -920,23 +919,13 @@ async function phonesDialog(id, onChange) {
 }
 async function customerDetail(view, id) {
   S.live = false;
-  const [c, drivers, products] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers'), data('/api/products')]);
-  const empties = products.filter(p => p.category === 'empty_cylinder');
+  const [c, drivers] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers')]);
   view.innerHTML = `<p><a href="#/customers">← 回客戶</a></p>
-    <div class="card"><div class="row between"><h2 style="margin:0">${esc(c.name)}</h2>
-      <div class="row"><span>買 ${money(c.total_sales)}・付 ${money(c.total_paid)}</span><span class="pill ${c.balance > 0 ? 'bad' : 'ok'}">${c.balance > 0 ? '欠 ' + money(c.balance) : '沒有欠款'}</span>
-      <button id="pay">記收款</button></div></div>
+    <div class="card"><div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span></div>
+      <div class="row" style="margin:10px 0 4px"><span>買 ${money(c.total_sales)}・付 ${money(c.total_paid)}</span><span class="pill ${c.balance > 0 ? 'bad' : 'ok'}">${c.balance > 0 ? '欠 ' + money(c.balance) : '沒有欠款'}</span>
+      <button id="pay">記收款</button></div>
       <form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
         <label style="margin:0;color:var(--text)"><input type="checkbox" name="active_box" ${c.active ? '' : 'checked'}>停用這位客戶</label></p></form></div>
-    <div class="card"><h3 style="margin-top:0">押瓶</h3>
-      ${c.deposits.length ? c.deposits.map(d => `<div>${esc(d.cylinder_name)}：手上 ${d.cylinders_held} 支，押金 ${money(d.deposit_amount)}</div>`).join('') : '<div class="muted">沒有押瓶</div>'}
-      ${empties.length ? `<div class="row" style="margin-top:8px"><select id="dp" style="width:auto">${empties.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select>
-        <input id="dq" type="number" placeholder="支數（還瓶打負數）" style="width:170px"><input id="da" type="number" placeholder="押金（退款打負數）" style="width:170px"><button id="dep">記錄押瓶</button></div>`
-        : '<div class="muted">要先在「商品」新增空瓶商品（分類選空瓶）</div>'}</div>
-    <div class="card"><h3 style="margin-top:0">特別價格</h3>
-      ${c.prices.map(p => `<div>${esc(p.name)}：${money(p.price)} <button class="ghost" data-delprice="${p.product_id}">刪除</button></div>`).join('') || '<div class="muted">沒有，用一般售價</div>'}
-      <div class="row" style="margin-top:8px"><select id="pp" style="width:auto">${products.filter(p => p.category !== 'empty_cylinder').map(p => `<option value="${p.id}">${esc(p.name)}（${money(p.sale_price)}）</option>`).join('')}</select>
-      <input id="pv" type="number" placeholder="特價" style="width:120px"><button id="setprice">設定</button></div></div>
     <div class="card table-wrap"><h3 style="margin-top:0">最近訂單</h3><table>
       ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td class="num">${money(o.total_amount)}</td><td>${esc(o.delivered_at || o.ordered_at)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
     ${legacyCustomerHTML(c.legacy)}`;
@@ -953,14 +942,7 @@ async function customerDetail(view, id) {
     const method = confirm('是轉帳嗎？（確定 = 轉帳，取消 = 現金）') ? 'transfer' : 'cash';
     try { await api('POST', '/api/payments', { customer_id: +id, amount: parseInt(v), method }); toast('已記收款', 'ok'); reload(); } catch (err) { toast(err.message, 'bad'); }
   };
-  const dep = $('#dep');
-  if (dep) dep.onclick = async () => {
-    try { await api('POST', '/api/deposits', { customer_id: +id, product_id: +$('#dp').value, qty_change: parseInt($('#dq').value) || 0, amount: parseInt($('#da').value) || 0 }); toast('已記錄', 'ok'); reload(); }
-    catch (err) { toast(err.message, 'bad'); }
-  };
-  $('#setprice').onclick = async () => { try { await api('PUT', `/api/customers/${id}/prices`, { product_id: +$('#pp').value, price: parseInt($('#pv').value) }); reload(); } catch (err) { toast(err.message, 'bad'); } };
   view.addEventListener('click', async e => {
-    const b = e.target.closest('[data-delprice]'); if (b) { await api('PUT', `/api/customers/${id}/prices`, { product_id: +b.dataset.delprice, price: null }); reload(); }
     const tr = e.target.closest('[data-o]'); if (tr) location.hash = '#/order/' + tr.dataset.o;
   });
 }
