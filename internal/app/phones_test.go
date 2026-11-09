@@ -103,3 +103,29 @@ func TestUpgradePhonesV4(t *testing.T) {
 		t.Fatal("升級搬電話不對", cnt, left)
 	}
 }
+
+// 記單時可以選現金／轉帳，沒選就是現金
+func TestOrderPayMethod(t *testing.T) {
+	_, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "phone": "0912000001", "address": "中正路 1 號"}))
+	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg 瓦斯", "category": "gas", "sale_price": 900}))
+	items := []any{map[string]any{"product_id": gas, "qty": 1}}
+	o1 := boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": items})
+	o2 := boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": items, "pay_method": "transfer"})
+	if o1["pay_method"] != "cash" || o2["pay_method"] != "transfer" {
+		t.Fatal("付款方式不對", o1["pay_method"], o2["pay_method"])
+	}
+	if code, _, _ := boss.do("POST", "/api/orders", map[string]any{"customer_id": cid, "items": items, "pay_method": "card"}); code != 400 {
+		t.Fatal("不認得的付款方式應該擋下來", code)
+	}
+	l := boss.list("/api/orders")
+	if len(l) != 2 || l[0].(map[string]any)["pay_method"] != "transfer" {
+		t.Fatal("訂單列表要有付款方式", l)
+	}
+	boss.ok("PUT", fmt.Sprint("/api/orders/", id(o2)), map[string]any{"pay_method": "cash"})
+	if o := boss.ok("GET", fmt.Sprint("/api/orders/", id(o2)), nil); o["pay_method"] != "cash" {
+		t.Fatal("改付款方式失敗", o["pay_method"])
+	}
+}

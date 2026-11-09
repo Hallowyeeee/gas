@@ -86,6 +86,11 @@ func migrate(db *sql.DB) error {
 				return err
 			}
 		}
+		if i == 3 { // 第 4 版：記單時選現金／轉帳
+			if err := ensureColumn(db, "orders", "pay_method", "TEXT NOT NULL DEFAULT 'cash' CHECK (pay_method IN ('cash','transfer'))"); err != nil {
+				return err
+			}
+		}
 		if _, err := db.Exec(upgrades[i]); err != nil {
 			return fmt.Errorf("資料庫升級到第 %d 版失敗: %w", i+1, err)
 		}
