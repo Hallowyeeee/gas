@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -29,10 +30,54 @@ type Tunnel struct {
 	Port     int
 	Dir      string // 放 cloudflared.exe 的資料夾
 	Download bool   // 找不到時自動下載
+	// Config 回傳固定網址用的通道金鑰和網址（沒設金鑰就用免費臨時網址）
+	Config func() (token, host string)
 
 	mu     sync.Mutex
 	url    string
 	status string
+	once   sync.Once
+	reload chan struct{}
+}
+
+func (t *Tunnel) reloadCh() chan struct{} {
+	t.once.Do(func() { t.reload = make(chan struct{}, 1) })
+	return t.reload
+}
+
+// Reload 設定改了，重新連線。
+func (t *Tunnel) Reload() {
+	if t == nil {
+		return
+	}
+	select {
+	case t.reloadCh() <- struct{}{}:
+	default:
+	}
+}
+
+func (t *Tunnel) config() (string, string) {
+	if t.Config == nil {
+		return "", ""
+	}
+	token, host := t.Config()
+	host = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(host), "https://"), "http://"), "/")
+	return strings.TrimSpace(token), host
+}
+
+// cleanTunnelToken 從貼上的文字找出金鑰：可以貼整段 Cloudflare 指令，或只貼 eyJ 開頭的金鑰。
+func cleanTunnelToken(v string) (string, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", nil
+	}
+	for _, f := range strings.Fields(v) {
+		f = strings.Trim(f, `"'`)
+		if strings.HasPrefix(f, "eyJ") && len(f) > 50 {
+			return f, nil
+		}
+	}
+	return "", bad("金鑰格式不對：請貼 Cloudflare 給的那段指令，或 eyJ 開頭的那一長串")
 }
 
 var tunnelURL = regexp.MustCompile(`https://[a-z0-9-]+\.trycloudflare\.com`)
@@ -144,8 +189,26 @@ func (t *Tunnel) Run(ctx context.Context) {
 				continue
 			}
 		}
-		t.set("", "通道連線中…")
-		cmd := exec.CommandContext(ctx, exe, "tunnel", "--no-autoupdate", "--url", fmt.Sprintf("http://localhost:%d", t.Port))
+		token, host := t.config()
+		cctx, cancel := context.WithCancel(ctx)
+		var reloaded atomic.Bool
+		go func() {
+			select {
+			case <-t.reloadCh():
+				reloaded.Store(true)
+				cancel()
+			case <-cctx.Done():
+			}
+		}()
+		var cmd *exec.Cmd
+		if token != "" {
+			t.set("", "固定網址連線中…")
+			cmd = exec.CommandContext(cctx, exe, "tunnel", "--no-autoupdate", "run")
+			cmd.Env = append(os.Environ(), "TUNNEL_TOKEN="+token) // 金鑰不放在指令列，比較安全
+		} else {
+			t.set("", "通道連線中…")
+			cmd = exec.CommandContext(cctx, exe, "tunnel", "--no-autoupdate", "--url", fmt.Sprintf("http://localhost:%d", t.Port))
+		}
 		hideWindow(cmd)
 		stderr, err := cmd.StderrPipe()
 		if err == nil {
@@ -157,7 +220,20 @@ func (t *Tunnel) Run(ctx context.Context) {
 			sc := bufio.NewScanner(stderr)
 			for sc.Scan() {
 				line := sc.Text()
-				if u := findTunnelURL(line); u != "" {
+				if token != "" {
+					if strings.Contains(line, "Registered tunnel connection") {
+						if host == "" {
+							t.set("", "已連線，但還沒填網址（到下面「固定網址設定」填）")
+						} else {
+							t.set("https://"+host, "已連線（固定網址）")
+						}
+					} else if strings.Contains(line, " ERR ") {
+						log.Println("通道:", line)
+						if strings.Contains(strings.ToLower(line), "unauthorized") || strings.Contains(strings.ToLower(line), "invalid") {
+							t.set("", "Cloudflare 不接受這個金鑰，請到設定重新貼上")
+						}
+					}
+				} else if u := findTunnelURL(line); u != "" {
 					t.set(u, "已連線")
 					log.Println("手機網址:", u)
 				} else if strings.Contains(line, " ERR ") {
@@ -165,9 +241,20 @@ func (t *Tunnel) Run(ctx context.Context) {
 				}
 			}
 			cmd.Wait()
-			t.set("", "通道中斷，10 秒後重新連線")
+			if !reloaded.Load() {
+				_, st := t.Info()
+				if !strings.Contains(st, "金鑰") {
+					t.set("", "通道中斷，10 秒後重新連線")
+				}
+			}
+		}
+		cancel()
+		if reloaded.Load() {
+			continue
 		}
 		select {
+		case <-t.reloadCh():
+			continue
 		case <-ctx.Done():
 			return
 		case <-time.After(10 * time.Second):

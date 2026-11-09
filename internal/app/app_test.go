@@ -2,13 +2,16 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -406,4 +409,76 @@ func TestOpenLINE(t *testing.T) {
 	if resp.StatusCode != 403 {
 		t.Fatal("外面連進來不能叫店裡電腦開程式", resp.StatusCode)
 	}
+}
+
+func TestCleanTunnelToken(t *testing.T) {
+	tok := "eyJhIjoiMTIzIiwidCI6ImFiYyIsInMiOiJzZWNyZXRzZWNyZXRzZWNyZXRzZWNyZXQifQ=="
+	for _, in := range []string{tok, "  " + tok + "\n", "cloudflared.exe service install " + tok, "sudo cloudflared service install '" + tok + "'"} {
+		if got, err := cleanTunnelToken(in); err != nil || got != tok {
+			t.Fatalf("%q → %q %v", in, got, err)
+		}
+	}
+	if _, err := cleanTunnelToken("abc"); err == nil {
+		t.Fatal("亂貼要擋")
+	}
+}
+
+func TestTunnelSettingsHidden(t *testing.T) {
+	a, c := setup(t)
+	c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "pass1234"})
+	login := c.ok("POST", "/api/login", map[string]any{"login_name": "boss", "password": "pass1234"})
+	c = c.as(login["token"].(string))
+	tok := "eyJhIjoiMTIzIiwidCI6ImFiYyIsInMiOiJzZWNyZXRzZWNyZXRzZWNyZXRzZWNyZXQifQ=="
+	c.ok("PUT", "/api/settings", map[string]any{"tunnel_token": "cloudflared.exe service install " + tok, "tunnel_host": "https://gas.example.com/"})
+	cfg := c.ok("GET", "/api/settings", nil)
+	if _, ok := cfg["tunnel_token"]; ok || cfg["tunnel_token_set"] != "1" || cfg["vapid_private"] != nil {
+		t.Fatal("金鑰不能傳到畫面", cfg)
+	}
+	tk, host := a.TunnelConfig()
+	if tk != tok || host != "https://gas.example.com/" {
+		t.Fatal(tk, host)
+	}
+	tn := &Tunnel{Config: a.TunnelConfig}
+	if _, h := tn.config(); h != "gas.example.com" {
+		t.Fatal("網址要去掉 https:// 和 /", h)
+	}
+	if code, _, _ := c.do("PUT", "/api/settings", map[string]any{"tunnel_token": "亂打"}); code != 400 {
+		t.Fatal("亂貼金鑰要擋", code)
+	}
+}
+
+func TestTunnelFixedURL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip()
+	}
+	dir := t.TempDir()
+	// 假的 cloudflared：有金鑰就印「已註冊」，沒有就印臨時網址
+	script := `#!/bin/sh
+if [ -n "$TUNNEL_TOKEN" ]; then echo "INF Registered tunnel connection connIndex=0" >&2; else echo "INF https://abc-def.trycloudflare.com" >&2; fi
+exec sleep 30
+`
+	os.WriteFile(filepath.Join(dir, "cloudflared"), []byte(script), 0o755)
+	var mu sync.Mutex
+	token := ""
+	tn := &Tunnel{Port: 1, Dir: dir, Config: func() (string, string) { mu.Lock(); defer mu.Unlock(); return token, "gas.example.com" }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go tn.Run(ctx)
+	wait := func(want string) {
+		t.Helper()
+		for i := 0; i < 100; i++ {
+			if u, _ := tn.Info(); u == want {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		u, st := tn.Info()
+		t.Fatalf("要 %s，結果 %s（%s）", want, u, st)
+	}
+	wait("https://abc-def.trycloudflare.com")
+	mu.Lock()
+	token = "eyJxxx"
+	mu.Unlock()
+	tn.Reload()
+	wait("https://gas.example.com")
 }

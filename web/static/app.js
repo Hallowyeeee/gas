@@ -1016,8 +1016,13 @@ async function settings(view) {
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
-      <p class="muted">師傅用手機相機掃 QR Code 打開，登入後按「分享 → 加入主畫面」。免費通道每次程式重開會換網址，要重新掃。</p>
-      ${sys.lan_urls.length ? `<p class="muted">店裡 WiFi：${sys.lan_urls.map(esc).join('、')}</p>` : ''}</div>
+      <p class="muted">師傅用手機相機掃 QR Code 打開，登入後按「分享 → 加入主畫面」。${cfg.tunnel_token_set ? '這是固定網址，不會變。' : '免費通道每次程式重開會換網址，要重新掃。'}</p>
+      ${sys.lan_urls.length ? `<p class="muted">店裡 WiFi：${sys.lan_urls.map(esc).join('、')}</p>` : ''}
+      ${admin ? `<details ${cfg.tunnel_token_set ? '' : 'open'}><summary>固定網址設定（Cloudflare）</summary>
+        <label>網址</label><input id="thost" value="${esc(cfg.tunnel_host || 'gas.hallowyeeee.com')}">
+        <label>通道金鑰${cfg.tunnel_token_set ? '（已設定；要換才貼新的）' : ''}</label>
+        <input id="ttok" autocomplete="off" placeholder="貼上 Cloudflare 給的整段指令，或 eyJ 開頭那一長串">
+        <p class="row"><button id="saveTun" class="primary">儲存並連線</button>${cfg.tunnel_token_set ? '<button id="clrTun" class="danger">改回免費臨時網址</button>' : ''}</p></details>` : ''}</div>
     ${admin ? `<div class="card"><div class="row between"><h3 style="margin:0">👷 帳號</h3><button id="addUser" class="primary">＋ 新增師傅 / 店員</button></div>
       <table><tr><th>名字</th><th>身分</th><th>帳號</th><th>電話</th><th></th></tr>
       ${users.map(u => `<tr style="${u.active ? '' : 'opacity:.5'}"><td>${esc(u.name)}</td><td>${{ admin: '老闆', staff: '店員', driver: '師傅' }[u.role]}</td><td>${esc(u.login_name)}</td><td>${esc(u.phone || '')}</td>
@@ -1060,6 +1065,15 @@ async function settings(view) {
       setTimeout(wait, 3000);
     } catch (e) { $('#updInfo').textContent = e.message; $('#updApply').disabled = false; }
   };
+  const tunSaved = msg => { toast(msg, 'ok'); setTimeout(() => location.hash.startsWith('#/settings') && settings(view), 5000); settings(view); };
+  $('#saveTun').onclick = async () => {
+    const body = { tunnel_host: $('#thost').value.trim() };
+    if ($('#ttok').value.trim()) body.tunnel_token = $('#ttok').value.trim();
+    else if (!cfg.tunnel_token_set) return toast('請貼上通道金鑰', 'bad');
+    try { await api('PUT', '/api/settings', body); tunSaved('已儲存，正在用固定網址連線…'); } catch (e) { toast(e.message, 'bad'); }
+  };
+  const clr = $('#clrTun');
+  if (clr) clr.onclick = async () => { if (!confirm('改回免費臨時網址？師傅要重新掃 QR Code。')) return; await api('PUT', '/api/settings', { tunnel_token: '' }); tunSaved('已改回臨時網址'); };
   $('#saveDir').onclick = async () => { await api('PUT', '/api/settings', { backup_dir: $('#bdir').value.trim() }); toast('已儲存', 'ok'); settings(view); };
   $('#bnow').onclick = async () => { try { const r = await api('POST', '/api/system/backup', {}); toast('已備份到 ' + r.path, 'ok'); settings(view); } catch (e) { toast('備份失敗：' + e.message, 'bad'); } };
   $('#addUser').onclick = () => {

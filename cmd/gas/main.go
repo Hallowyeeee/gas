@@ -70,6 +70,7 @@ func main() {
 	go a.Backup.Run(ctx)
 	if !*noTunnel {
 		a.Tunnel = &app.Tunnel{Port: *port, Dir: baseDir, Download: true}
+		a.Tunnel.Config = a.TunnelConfig
 		go a.Tunnel.Run(ctx)
 	}
 	go a.CheckUpdateOnStart(ctx, ui.Notify)

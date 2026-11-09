@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // ---------------------------------------------------------------------
@@ -151,6 +152,12 @@ func (a *App) getSettings(r *http.Request, u *User) (any, error) {
 	for _, m := range list {
 		out[m["key"].(string)] = m["value"]
 	}
+	// 通道金鑰等於大門鑰匙，不傳到畫面上，只告訴有沒有設定
+	if v, _ := out["tunnel_token"].(string); v != "" {
+		out["tunnel_token_set"] = "1"
+	}
+	delete(out, "tunnel_token")
+	delete(out, "vapid_private")
 	return out, nil
 }
 
@@ -159,13 +166,36 @@ func (a *App) putSettings(r *http.Request, u *User) (any, error) {
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
 	}
+	if v, ok := in["tunnel_token"]; ok {
+		t, err := cleanTunnelToken(v)
+		if err != nil {
+			return nil, err
+		}
+		in["tunnel_token"] = t
+	}
 	for k, v := range in {
+		if strings.HasPrefix(k, "vapid_") {
+			continue // 推播金鑰不能從畫面改
+		}
 		if _, err := a.DB.ExecContext(r.Context(), `INSERT INTO settings (key, value) VALUES (?, ?)
 			ON CONFLICT (key) DO UPDATE SET value = excluded.value`, k, v); err != nil {
 			return nil, err
 		}
 	}
+	_, a1 := in["tunnel_token"]
+	_, a2 := in["tunnel_host"]
+	if a1 || a2 {
+		a.Tunnel.Reload()
+	}
 	return nil, nil
+}
+
+// TunnelConfig 給通道讀固定網址設定。
+func (a *App) TunnelConfig() (string, string) {
+	var token, host string
+	a.DB.QueryRow(`SELECT value FROM settings WHERE key = 'tunnel_token'`).Scan(&token)
+	a.DB.QueryRow(`SELECT value FROM settings WHERE key = 'tunnel_host'`).Scan(&host)
+	return token, host
 }
 
 func (a *App) setting(r *http.Request, key, def string) string {
