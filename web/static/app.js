@@ -530,7 +530,7 @@ async function officeNew(view) {
     const v = q.value.trim();
     st.results = v ? await api('GET', '/api/customers?limit=30&q=' + encodeURIComponent(v)).catch(() => {
       const all = store.get('c:/api/customers?limit=1000', []);
-      return all.filter(c => [c.name, c.phone, c.phone2, c.address].some(x => (x || '').includes(v))).slice(0, 30);
+      return all.filter(c => [c.name, c.phone, c.other_phones, c.address].some(x => (x || '').includes(v))).slice(0, 30);
     }) : [];
     renderResults(v);
   };
@@ -833,7 +833,7 @@ async function customerList(view) {
     <div class="card table-wrap"><table><thead><tr><th>名字</th><th>電話</th><th>地址</th><th>結帳</th><th class="num">欠款</th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const draw = () => {
     const v = $('#q').value.trim();
-    $('#tb').innerHTML = list.filter(c => !v || [c.name, c.phone, c.phone2, c.address, c.code].some(x => (x || '').includes(v))).slice(0, 300)
+    $('#tb').innerHTML = list.filter(c => !v || [c.name, c.phone, c.other_phones, c.address, c.code].some(x => (x || '').includes(v))).slice(0, 300)
       .map(c => `<tr class="click" data-id="${c.id}"><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc(c.address)}</td><td>${c.billing_type === 'monthly' ? '月結' : '現結'}</td><td class="num">${c.balance ? money(c.balance) : ''}</td></tr>`).join('');
   };
   draw();
@@ -843,11 +843,14 @@ async function customerList(view) {
 }
 
 const CUSTOMER_FORM = [
-  ['name', '名字 *'], ['phone', '電話'], ['phone2', '電話 2'], ['address', '地址 *'], ['floor', '樓層'], ['area', '區域'],
+  ['name', '名字 *'], ['phone', '電話'], ['address', '地址 *'], ['floor', '樓層'], ['area', '區域'],
   ['code', '客戶編號'], ['refill_days', '大約幾天換一次瓶', 'number'], ['tax_id', '統一編號'], ['invoice_title', '發票抬頭'],
 ];
 function customerFormHTML(c, drivers) {
-  return `<div class="form-grid">${CUSTOMER_FORM.map(([k, t, type]) => `<div><label>${t}</label><input name="${k}" type="${type || 'text'}" value="${esc(c[k] ?? '')}"></div>`).join('')}
+  const phoneCard = c.id ? `<button type="button" class="ghost phone-card" id="morePhones">其他電話（${(c.phones || []).length}）</button>` : '';
+  return `<div class="form-grid">${CUSTOMER_FORM.map(([k, t, type]) => k === 'phone'
+      ? `<div><label>${t}</label><div class="row" style="flex-wrap:nowrap"><input name="phone" value="${esc(c.phone ?? '')}">${phoneCard}</div></div>`
+      : `<div><label>${t}</label><input name="${k}" type="${type || 'text'}" value="${esc(c[k] ?? '')}"></div>`).join('')}
     <div><label>結帳方式</label><select name="billing_type"><option value="cash">現結</option><option value="monthly" ${c.billing_type === 'monthly' ? 'selected' : ''}>月結</option></select></div>
     <div><label>電梯</label><select name="has_elevator"><option value="">不確定</option><option value="1" ${c.has_elevator === 1 ? 'selected' : ''}>有電梯</option><option value="0" ${c.has_elevator === 0 ? 'selected' : ''}>沒有電梯</option></select></div>
     <div><label>固定師傅</label><select name="default_driver_id"><option value="">不指定</option>${drivers.map(d => `<option value="${d.id}" ${c.default_driver_id === d.id ? 'selected' : ''}>${esc(d.name)}</option>`).join('')}</select></div>
@@ -879,6 +882,42 @@ async function customerDialog(c, done) {
   dlg.showModal();
   $('input', form).focus();
 }
+// 「其他電話」卡片：點了才跳出來，可以加、刪、換成主要號碼
+async function phonesDialog(id, onChange) {
+  const dlg = $('#dlg');
+  const draw = async () => {
+    const c = await api('GET', '/api/customers/' + id);
+    dlg.innerHTML = `<form method="dialog"><h2>${esc(c.name)} 的電話</h2>
+      <div class="phone-main">主要號碼：<b>${esc(c.phone || '（沒有）')}</b></div>
+      <div class="table-wrap"><table>${c.phones.map(p => `<tr><td>${esc(p.phone)}</td><td class="muted">${esc(p.note || '')}</td>
+        <td class="num"><button type="button" class="ghost" data-main="${p.id}">設成主要</button> <button type="button" class="ghost" data-del="${p.id}">刪除</button></td></tr>`).join('')
+        || '<tr><td class="muted">還沒有其他電話</td></tr>'}</table></div>
+      <div class="row" style="margin-top:10px"><input id="np" placeholder="新電話" style="width:160px"><input id="nn" placeholder="備註（可不填）" style="width:160px"><button type="button" class="primary" id="addp">＋ 加電話</button></div>
+      <div class="row" style="margin-top:14px"><button value="close">關閉</button></div></form>`;
+    const np = $('#np', dlg);
+    const add = async () => {
+      if (!np.value.trim()) return np.focus();
+      try { await api('POST', `/api/customers/${id}/phones`, { phone: np.value, note: $('#nn', dlg).value }); changed = true; await draw(); $('#np', dlg).focus(); }
+      catch (err) { toast(err.message, 'bad'); }
+    };
+    $('#addp', dlg).onclick = add;
+    np.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+    $('table', dlg).onclick = async e => {
+      const m = e.target.closest('[data-main]'), d = e.target.closest('[data-del]');
+      try {
+        if (m) await api('POST', `/api/customers/${id}/phones/${m.dataset.main}/main`, {});
+        else if (d) { if (!confirm('刪掉這支電話？')) return; await api('DELETE', `/api/customers/${id}/phones/${d.dataset.del}`); }
+        else return;
+        changed = true; draw();
+      } catch (err) { toast(err.message, 'bad'); }
+    };
+  };
+  let changed = false;
+  dlg.onclose = () => { dlg.onclose = null; store.del('c:/api/customers?limit=1000'); if (changed && onChange) onChange(); };
+  await draw();
+  dlg.showModal();
+  $('#np', dlg).focus();
+}
 async function customerDetail(view, id) {
   S.live = false;
   const [c, drivers, products] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers'), data('/api/products')]);
@@ -902,6 +941,7 @@ async function customerDetail(view, id) {
       ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td class="num">${money(o.total_amount)}</td><td>${esc(o.delivered_at || o.ordered_at)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
     ${legacyCustomerHTML(c.legacy)}`;
   const reload = () => customerDetail(view, id);
+  $('#morePhones').onclick = () => phonesDialog(id, reload);
   $('#f').onsubmit = async e => {
     e.preventDefault();
     const body = readCustomerForm(e.target); body.active = !e.target.active_box.checked; delete body.active_box;

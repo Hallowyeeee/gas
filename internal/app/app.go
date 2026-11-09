@@ -121,6 +121,7 @@ var upgrades = []string{
 	);
 	CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs(received_at);`,
 	2: gasdb.Legacy,
+	3: gasdb.Phones,
 }
 
 // ---------------------------------------------------------------------

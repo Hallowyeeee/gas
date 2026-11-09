@@ -1,8 +1,11 @@
 package app
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 // ---------------------------------------------------------------------
@@ -24,8 +27,11 @@ func (a *App) listCustomers(r *http.Request, u *User) (any, error) {
 	like := "%" + q + "%"
 	active := r.URL.Query().Get("all") == ""
 	return rows(r.Context(), a.DB, `
-		SELECT c.*, b.balance FROM customers c LEFT JOIN v_customer_balance b ON b.customer_id = c.id
-		WHERE (? = '' OR c.name LIKE ? OR c.phone LIKE ? OR c.phone2 LIKE ? OR c.address LIKE ? OR c.code LIKE ?)
+		SELECT c.*, b.balance,
+		       (SELECT group_concat(p.phone, ' ') FROM customer_phones p WHERE p.customer_id = c.id) AS other_phones
+		FROM customers c LEFT JOIN v_customer_balance b ON b.customer_id = c.id
+		WHERE (? = '' OR c.name LIKE ? OR c.phone LIKE ? OR c.address LIKE ? OR c.code LIKE ?
+		       OR EXISTS (SELECT 1 FROM customer_phones p WHERE p.customer_id = c.id AND p.phone LIKE ?))
 		  AND (? = 0 OR c.active = 1)
 		ORDER BY c.name LIMIT ?`, q, like, like, like, like, like, active, limitParam(r, 200))
 }
@@ -40,6 +46,9 @@ func (a *App) getCustomer(r *http.Request, u *User) (any, error) {
 		FROM customers c LEFT JOIN v_customer_balance b ON b.customer_id = c.id WHERE c.id = ?`, id)
 	if err != nil || c == nil {
 		return nil, orNotFound(err, "找不到客戶")
+	}
+	if c["phones"], err = rows(ctx, a.DB, `SELECT id, phone, note FROM customer_phones WHERE customer_id = ? ORDER BY id`, id); err != nil {
+		return nil, err
 	}
 	if c["prices"], err = rows(ctx, a.DB, `SELECT cp.product_id, p.name, cp.price FROM customer_prices cp JOIN products p ON p.id = cp.product_id WHERE cp.customer_id = ?`, id); err != nil {
 		return nil, err
@@ -95,6 +104,114 @@ func (a *App) setCustomerPrice(r *http.Request, u *User) (any, error) {
 	_, err = a.DB.ExecContext(r.Context(), `INSERT INTO customer_prices (customer_id, product_id, price) VALUES (?, ?, ?)
 		ON CONFLICT (customer_id, product_id) DO UPDATE SET price = excluded.price`, id, pid, price)
 	return nil, err
+}
+
+// ---------------------------------------------------------------------
+// 客戶的「其他電話」
+// ---------------------------------------------------------------------
+
+func phoneID(r *http.Request) (int64, error) {
+	id, err := strconv.ParseInt(r.PathValue("pid"), 10, 64)
+	if err != nil {
+		return 0, bad("電話編號錯誤")
+	}
+	return id, nil
+}
+
+// addCustomerPhone 加一支電話。主要號碼空著的話直接當主要號碼。
+func (a *App) addCustomerPhone(r *http.Request, u *User) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	var in struct {
+		Phone string `json:"phone"`
+		Note  string `json:"note"`
+	}
+	if err := readJSON(r, &in); err != nil {
+		return nil, err
+	}
+	phone, note := strings.TrimSpace(in.Phone), strings.TrimSpace(in.Note)
+	if phone == "" {
+		return nil, bad("請輸入電話")
+	}
+	ctx := r.Context()
+	var main sql.NullString
+	if err := a.DB.QueryRowContext(ctx, `SELECT phone FROM customers WHERE id = ?`, id).Scan(&main); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, notFound("找不到客戶")
+		}
+		return nil, err
+	}
+	if strings.TrimSpace(main.String) == "" {
+		_, err = a.DB.ExecContext(ctx, `UPDATE customers SET phone = ?, updated_at = datetime('now','localtime') WHERE id = ?`, phone, id)
+		return map[string]bool{"main": true}, err
+	}
+	if normalizePhone(main.String) == normalizePhone(phone) {
+		return nil, bad("這支就是主要號碼")
+	}
+	var dup int
+	a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM customer_phones WHERE customer_id = ? AND phone = ?`, id, phone).Scan(&dup)
+	if dup > 0 {
+		return nil, bad("這支電話已經有了")
+	}
+	_, err = a.DB.ExecContext(ctx, `INSERT INTO customer_phones (customer_id, phone, note) VALUES (?, ?, ?)`, id, phone, nullIfEmpty(note))
+	return map[string]bool{"main": false}, err
+}
+
+func (a *App) deleteCustomerPhone(r *http.Request, u *User) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	pid, err := phoneID(r)
+	if err != nil {
+		return nil, err
+	}
+	_, err = a.DB.ExecContext(r.Context(), `DELETE FROM customer_phones WHERE id = ? AND customer_id = ?`, pid, id)
+	return map[string]bool{"ok": true}, err
+}
+
+// mainCustomerPhone 把卡片裡的一支換成主要號碼，原本的主要號碼收進卡片。
+func (a *App) mainCustomerPhone(r *http.Request, u *User) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	pid, err := phoneID(r)
+	if err != nil {
+		return nil, err
+	}
+	ctx := r.Context()
+	tx, err := a.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	var phone string
+	var note sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT phone, note FROM customer_phones WHERE id = ? AND customer_id = ?`, pid, id).Scan(&phone, &note); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, notFound("找不到這支電話")
+		}
+		return nil, err
+	}
+	var main sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT phone FROM customers WHERE id = ?`, id).Scan(&main); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM customer_phones WHERE id = ?`, pid); err != nil {
+		return nil, err
+	}
+	if old := strings.TrimSpace(main.String); old != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO customer_phones (customer_id, phone, note) VALUES (?, ?, ?)`, id, old, note); err != nil {
+			return nil, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE customers SET phone = ?, updated_at = datetime('now','localtime') WHERE id = ?`, phone, id); err != nil {
+		return nil, err
+	}
+	return map[string]bool{"ok": true}, tx.Commit()
 }
 
 // ---------------------------------------------------------------------
