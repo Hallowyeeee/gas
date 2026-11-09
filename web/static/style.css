@@ -155,3 +155,7 @@ dialog.capdlg { width:min(96vw,760px); }
 .steps .btn { display:inline-block; padding:4px 12px; border-radius:8px; text-decoration:none; cursor:grab; }
 .phone-card { white-space:nowrap; border:1px solid var(--blue) !important; border-radius:8px; padding:4px 10px; }
 .phone-main { margin-bottom:8px; }
+.cust-head { display:flex; align-items:baseline; gap:16px; flex-wrap:wrap; }
+.cust-name { font-size:30px; font-weight:700; }
+.cust-code { font-size:18px; color:var(--muted, #666); }
+.phone-cell { grid-column: span 2; } .phone-cell input { min-width:0; flex:1; }
