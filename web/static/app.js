@@ -126,6 +126,7 @@ function lineText(o) {
     `【派單】${o.driver_name || ''}`.trim(),
     `單號：${o.order_no || ''}`,
     `客戶：${o.customer_name || ''}`,
+    o.delivery_date && (o.delivery_date !== today() || o.delivery_slot) ? `送貨：${dayText(o.delivery_date)} ${slotText(o.delivery_slot)}` : '',
     o.phone ? `電話：${o.phone}` : '',
     `地址：${where}`,
     items ? `品項：${items}` : '',
@@ -249,7 +250,7 @@ function showCall(call) {
     navigator.serviceWorker?.ready.then(r => r.showNotification('來電 ' + fmtPhone(call.phone), { body: c ? c.name + '｜' + c.address : '新客人', tag: 'call-' + call.id }));
   }
   if (S.newPage) S.newPage.onCall(call);
-  else location.hash = '#/new';
+  else location.hash = '#/home';
 }
 function callRowHTML(k, active) {
   const c = (k.matches || [])[0];
@@ -337,7 +338,23 @@ function bindCallSettings(view) {
 // ---------------------------------------------------------------------
 // 路由
 // ---------------------------------------------------------------------
-const OFFICE_NAV = [['#/orders', '訂單'], ['#/new', '＋記單'], ['#/customers', '客戶'], ['#/products', '商品'], ['#/reconcile', '對帳'], ['#/settings', '設定']];
+// 電腦版只有 5 大塊，點進去是卡片；設定放右上角齒輪
+const OFFICE_NAV = [['#/home', '🏠 首頁'], ['#/dispatch', '🚚 派送'], ['#/customers', '👥 客戶'], ['#/money', '💰 帳務'], ['#/stock', '📦 商品庫存']];
+// 每個頁面屬於哪一大塊（上面選單要亮哪一個）
+const SECTION = {
+  home: 'home', new: 'home', calls: 'home',
+  dispatch: 'dispatch', today: 'dispatch', shifts: 'dispatch', orders: 'dispatch', order: 'dispatch',
+  customers: 'customers',
+  money: 'money', dashboard: 'money', reconcile: 'money',
+  stock: 'stock', products: 'stock', stocklist: 'stock',
+};
+const SLOT = { am: '上午', pm: '下午', eve: '晚上' };
+const SLOTS = ['am', 'pm', 'eve'];
+const slotText = s => SLOT[s] || '不指定';
+const addDays = (d, n) => { const x = new Date(d + 'T12:00:00'); x.setDate(x.getDate() + n); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+const WEEK = '日一二三四五六';
+const dayText = d => { if (!d) return ''; const t = today(); const w = WEEK[new Date(d + 'T12:00:00').getDay()];
+  return `${+d.slice(5, 7)}/${+d.slice(8, 10)}（${w}）${d === t ? ' 今天' : d === addDays(t, 1) ? ' 明天' : d === addDays(t, -1) ? ' 昨天' : ''}`; };
 
 function shell(nav) {
   document.body.className = S.me.role === 'driver' ? 'driver' : 'office';
@@ -348,6 +365,7 @@ function shell(nav) {
       <div class="spacer"></div>
       <span class="net" id="pending"></span><span class="net" id="net"></span>
       <span class="muted" style="white-space:nowrap">${esc(S.me.name)}</span>
+      ${S.me.role === 'driver' ? '' : '<a class="gear" href="#/settings" title="設定">⚙️</a>'}
       <button class="ghost" id="logout">登出</button>
     </div></header>
     <main id="view"></main><div id="toast"></div><dialog id="dlg"></dialog>`;
@@ -367,17 +385,26 @@ async function route(soft) {
   if (lastShell !== S.me.role + S.me.id) {
     shell(nav); lastShell = S.me.role + S.me.id; connectEvents();
     if (S.me.role === 'admin') api('GET', '/api/system').then(sys => {
-      if (sys.update && sys.update.available) $('.nav').insertAdjacentHTML('beforeend', '<a href="#/settings" style="color:var(--accent);font-weight:600">⬆ 有新版</a>');
+      if (sys.update && sys.update.available) $('.nav').insertAdjacentHTML('beforeend', '<a href="#/settings" class="upd" style="color:var(--accent);font-weight:600">⬆ 有新版</a>');
     }).catch(() => { });
   }
-  let h = location.hash || (driver ? '#/my' : '#/orders');
-  $$('.nav a').forEach(a => a.classList.toggle('on', h === a.getAttribute('href') || h.startsWith(a.getAttribute('href') + '/')));
+  let h = location.hash || (driver ? '#/my' : '#/home');
   const [, page, arg] = h.split('/');
+  if (driver) $$('.nav a').forEach(a => a.classList.toggle('on', h === a.getAttribute('href') || h.startsWith(a.getAttribute('href') + '/')));
+  else $$('.nav a:not(.upd)').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#/' + (SECTION[page] || '')));
+  const gear = $('.gear'); if (gear) gear.classList.toggle('on', page === 'settings');
   const view = $('#view');
   const views = driver
     ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone }
-    : { orders: officeOrders, new: officeNew, customers: arg ? customerDetail : customerList, products: productList, reconcile: reconcile, settings: settings, order: orderDetail };
-  const fn = views[page] || (driver ? driverJobs : officeOrders);
+    : {
+      home: officeNew, new: officeNew, calls: callHistory,
+      dispatch: hubDispatch, today: todayBoard, shifts: shiftsPage, orders: ordersQuery, order: orderDetail,
+      customers: arg ? customerDetail : customerList,
+      money: hubMoney, dashboard: dashboardPage, reconcile,
+      stock: hubStock, products: productList, stocklist: stockList,
+      settings,
+    };
+  const fn = views[page] || (driver ? driverJobs : officeNew);
   if (soft && !S.live) return;
   S.live = true;
   try { await fn(view, arg); }
@@ -417,56 +444,307 @@ async function showLogin() {
 }
 
 // ---------------------------------------------------------------------
-// 電腦版：訂單看板
+// 大塊首頁：卡片
 // ---------------------------------------------------------------------
-function orderCard(o, drivers) {
-  const pending = o._pending ? ' pending' : '';
-  const paid = o.status === 'delivered' && o.billing_type === 'cash'
-    ? (o.paid_amount === o.total_amount ? '<span class="pill ok">已收齊</span>' : `<span class="pill bad">收 ${money(o.paid_amount)}</span>`) : '';
-  let actions = '';
-  if (o.status === 'new' || o.status === 'dispatched') {
-    actions = drivers.map(d => `<button data-dispatch="${o.id}" data-driver="${d.id}" ${o.driver_id === d.id ? 'class="primary"' : ''}>${esc(d.name)}</button>`).join('')
-      + (o.status === 'dispatched' ? `<button class="ghost" data-line="${o.id}">傳 LINE</button>` : '')
-      + `<button class="ghost" data-open="${o.id}">詳情</button>`;
-  } else {
-    actions = `<button class="ghost" data-open="${o.id}">詳情</button>`;
-  }
-  return `<div class="order ${o.status}${pending}">
-    <div class="row between"><span class="title">${esc(o.customer_name)}</span><span class="money">${money(o.total_amount)}</span></div>
-    <div class="addr">${esc(o.address)}${o.floor ? '・' + esc(o.floor) : ''}${o.has_elevator === 0 ? '・無電梯' : ''}</div>
-    <div class="row"><span class="grow">${esc(o.summary || '')}</span>
-      ${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : ''}${paid}
-      <span class="muted">${o.status === 'delivered' ? '送達 ' + hhmm(o.delivered_at) : hhmm(o.ordered_at)}${o.driver_name && o.status !== 'new' ? '・' + esc(o.driver_name) : ''}</span></div>
-    ${o.note ? `<div class="muted">📝 ${esc(o.note)}</div>` : ''}
-    <div class="actions">${actions}</div></div>`;
+function cardGrid(title, sub, cards) {
+  return `<h2>${title}</h2>${sub ? `<p class="muted" style="margin:-8px 0 14px">${sub}</p>` : ''}<div class="hub">${cards.map(c => `
+    <a class="hubcard${c.hl ? ' hl' : ''}" href="${c.href}">${c.count != null && c.count !== '' ? `<span class="n">${c.count}</span>` : ''}
+      <div class="ic">${c.icon}</div><h3>${c.title}</h3><p>${c.desc}</p></a>`).join('')}</div>`;
 }
 
-async function officeOrders(view) {
-  const [orders, drivers] = await Promise.all([data('/api/orders?limit=300'), data('/api/drivers')]);
+async function hubDispatch(view) {
+  const t = today(), tm = addDays(t, 1);
+  const [open, tomorrow, done] = await Promise.all([
+    data('/api/orders?open_until=' + t), data('/api/orders?status=new&delivery_date=' + tm), data('/api/orders?status=delivered&date=' + t)]);
+  view.innerHTML = cardGrid('派送', '點一張卡片進去', [
+    { href: '#/today', icon: '📋', title: '今日待辦', desc: '還沒派的單、每位師傅的單；看板拖拉派單，或切成表格看金額合計', count: open.length || '', hl: open.length > 0 },
+    { href: '#/today/' + tm, icon: '📅', title: '明日預約', desc: '明天要送的單，可以先排好', count: tomorrow.length || '' },
+    { href: '#/shifts', icon: '🗓️', title: '排班', desc: '每位師傅上午／下午／晚上有沒有班' },
+    { href: '#/orders', icon: '🔎', title: '訂單查詢', desc: '依配送日期查訂單，看新單、已派、已送達、已取消' },
+    { href: '#/orders/delivered', icon: '✅', title: '今天已送', desc: '送達、收款回報', count: done.length || '' },
+  ]);
+}
+
+async function hubMoney(view) {
+  const [debt, bal] = await Promise.all([data('/api/orders?debt=cash'), data('/api/reports/customer-balance')]);
+  const monthly = bal.filter(b => b.billing_type === 'monthly' && b.balance > 0);
+  view.innerHTML = cardGrid('帳務', '', [
+    { href: '#/dashboard', icon: '📊', title: '儀表板', desc: '今天完成多少、接單派送量、本週本月營業額、每月長條圖' },
+    { href: '#/reconcile', icon: '🧾', title: '每日對帳', desc: '每位師傅收了多少、該交多少、交了沒' },
+    { href: '#/orders/cashdebt', icon: '⚠️', title: '現金欠款', desc: '送到了但錢沒收齊的現結單', count: debt.length || '', hl: debt.length > 0 },
+    { href: '#/orders/monthlydebt', icon: '📒', title: '月結欠款', desc: '月結客戶目前還沒付的錢', count: monthly.length ? money(monthly.reduce((s, b) => s + b.balance, 0)) : '' },
+  ]);
+}
+
+async function hubStock(view) {
+  const [products, stock] = await Promise.all([data('/api/products?all=1'), data('/api/stock')]);
+  const low = stock.filter(x => x.is_low).length;
+  view.innerHTML = cardGrid('商品庫存', '', [
+    { href: '#/products', icon: '🏷️', title: '商品', desc: '瓦斯、空瓶、爐具、耗材的價格和上架', count: products.filter(p => p.active).length },
+    { href: '#/stocklist', icon: '🛢️', title: '庫存', desc: '每樣東西還剩多少，低於提醒數量會標紅', count: low ? '低 ' + low : '', hl: low > 0 },
+  ]);
+}
+
+async function stockList(view) {
+  const list = await data('/api/stock');
+  view.innerHTML = `<p><a href="#/stock">← 商品庫存</a></p><h2>庫存</h2>
+    <div class="card table-wrap"><table><tr><th>名稱</th><th>分類</th><th class="num">庫存</th><th class="num">低於幾個提醒</th></tr>
+    ${list.map(x => `<tr class="${x.is_low ? 'bad' : ''}"><td>${esc(x.name)}</td><td>${CAT[x.category] || ''}</td><td class="num">${x.qty} ${esc(x.unit || '')}</td><td class="num">${x.low_stock_alert ?? ''}</td></tr>`).join('')
+    || '<tr><td class="muted" colspan="4">還沒有要算庫存的商品</td></tr>'}</table></div>
+    <p class="muted">要調整庫存（盤點），到「商品」點那樣東西。</p>`;
+}
+
+// ---------------------------------------------------------------------
+// 今日待辦：左邊待派、右邊每位師傅（看板拖拉派單，或表格看合計）
+// ---------------------------------------------------------------------
+async function todayBoard(view, arg) {
   const t = today();
-  const cols = [
-    ['new', '新單', orders.filter(o => o.status === 'new')],
-    ['dispatched', '已派單（送貨中）', orders.filter(o => o.status === 'dispatched')],
-    ['delivered', '今天已送達', orders.filter(o => o.status === 'delivered' && (o.delivered_at || '').startsWith(t))],
-  ];
-  view.innerHTML = `<div class="row between"><h2>訂單</h2><a class="btn primary" href="#/new">＋ 記單（F2）</a></div>
-    ${drivers.length ? '' : '<div class="card">還沒有師傅帳號，請到「設定」新增師傅，才能派單。</div>'}
-    <div class="board">${cols.map(([k, title, list]) => `<section class="col"><h3>${title}<span class="pill">${list.length}</span></h3>
-      ${list.map(o => orderCard(o, drivers)).join('') || '<div class="muted">沒有</div>'}</section>`).join('')}</div>`;
-  view.onclick = e => {
-    const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.open) location.hash = '#/order/' + b.dataset.open;
-    if (b.dataset.line) { const o = orders.find(x => x.id === +b.dataset.line); if (o) sendLine(o); }
-    if (b.dataset.dispatch) {
-      const id = +b.dataset.dispatch, driver = +b.dataset.driver;
-      const d = drivers.find(x => x.id === driver);
-      patch('/api/orders?limit=300', list => list.map(o => o.id === id ? { ...o, status: 'dispatched', driver_id: driver, driver_name: d.name, _pending: true } : o));
-      queue('POST', `/api/orders/${id}/dispatch`, { driver_id: driver }, '派單');
-      const o = orders.find(x => x.id === id);
-      toast(`已派給 ${d.name}`, 'ok', o && lineAction({ ...o, driver_id: driver, driver_name: d.name }));
-      route(true);
-    }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(arg || '') ? arg : t;
+  const isToday = date === t;
+  const mode = store.get('boardMode', 'board');
+  const lists = await Promise.all([
+    data('/api/drivers'), data('/api/shifts?date=' + date), data('/api/orders?delivery_date=' + date),
+    isToday ? data('/api/orders?open_until=' + t) : [], isToday ? data('/api/orders?status=dispatched') : []]);
+  const [drivers, shifts] = lists;
+  const seen = new Set(); const orders = [];
+  for (const o of [...lists[2], ...lists[3], ...lists[4]]) if (!seen.has(o.id) && o.status !== 'cancelled') { seen.add(o.id); orders.push(o); }
+  const st = { orders, shifts: shifts.map(x => x.driver_id + ':' + x.slot) };
+  const onShift = (d, s) => st.shifts.includes(d + ':' + s);
+  const late = o => o.delivery_date && o.delivery_date < date ? `<span class="pill bad">逾期 ${esc(o.delivery_date.slice(5).replace('-', '/'))}</span>` : '';
+  const card = o => `<div class="tcard ${o.status}${o._pending ? ' pending' : ''}" draggable="${o.status === 'delivered' ? 'false' : 'true'}" data-o="${o.id}">
+      <div class="row between" style="flex-wrap:nowrap"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.address)}</b><span class="money">${money(o.total_amount)}</span></div>
+      <div>${esc(o.summary || '')}</div>
+      <div class="row" style="gap:4px"><span class="muted grow">${esc(o.customer_name)}</span>${late(o)}
+        ${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : ''}
+        ${o.status === 'delivered' ? '<span class="pill ok">✓ 已送</span>' : ''}</div>
+      ${o.note ? `<div class="muted" style="font-size:13px">📝 ${esc(o.note)}</div>` : ''}
+      ${o.status === 'new' ? `<select class="pick" data-pick="${o.id}"><option value="">派給…</option>${drivers.map(d => `<option value="${d.id}">${esc(d.name)}${onShift(d.id, o.delivery_slot || 'am') || onShift(d.id, 'pm') || onShift(d.id, 'eve') ? '' : '（沒排班）'}</option>`).join('')}</select>` : ''}
+    </div>`;
+  const draw = () => {
+    const pend = st.orders.filter(o => o.status === 'new');
+    const groups = [...SLOTS, ''].map(s => [s, pend.filter(o => (o.delivery_slot || '') === s)]).filter(([, l]) => l.length);
+    const work = drivers.map(d => ({ d, list: st.orders.filter(o => o.driver_id === d.id && o.status !== 'new'), on: SLOTS.filter(s => onShift(d.id, s)) }))
+      .sort((a, b) => (b.on.length > 0) - (a.on.length > 0));
+    const sum = l => ({ n: l.length, qty: l.reduce((s, o) => s + (o.gas_qty || 0), 0), amt: l.reduce((s, o) => s + o.total_amount, 0), paid: l.reduce((s, o) => s + (o.paid_amount || 0), 0) });
+    const right = mode === 'table'
+      ? `<div class="card table-wrap"><table class="ttable"><tr><th>單號</th><th>時段</th><th>客戶</th><th>電話</th><th>地址</th><th>品項</th><th class="num">瓦斯</th><th class="num">金額</th><th class="num">實收</th><th>狀態</th><th>備註</th></tr>
+        ${work.filter(w => w.list.length || w.on.length).map(w => { const x = sum(w.list); return `<tr class="drv"><td colspan="11"><b>${esc(w.d.name)}</b> <span class="muted">${w.on.length ? w.on.map(slotText).join('、') + '有班' : '沒排班'}・${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></td></tr>
+          ${w.list.map(o => `<tr class="click" data-open="${o.id}"><td>${esc(o.order_no)}</td><td>${slotText(o.delivery_slot)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.phone || '')}</td><td>${esc(o.address)}</td><td>${esc(o.summary || '')}</td>
+            <td class="num">${o.gas_qty || ''}</td><td class="num">${money(o.total_amount)}</td><td class="num">${o.status === 'delivered' ? money(o.paid_amount) : ''}</td><td>${STATUS[o.status]}</td><td class="muted">${esc(o.note || '')}</td></tr>`).join('') || '<tr><td colspan="11" class="muted">沒有單</td></tr>'}
+          <tr class="sub"><td colspan="6">小計 ${x.n} 單</td><td class="num">${x.qty}</td><td class="num">${money(x.amt)}</td><td class="num">${money(x.paid)}</td><td colspan="2"></td></tr>`; }).join('')}
+        ${pend.length ? `<tr class="drv"><td colspan="11"><b>還沒派</b> <span class="muted">${pend.length} 單</span></td></tr>` : ''}
+        ${(() => { const x = sum(st.orders); return `<tr class="total"><td colspan="6">全日合計 ${x.n} 單</td><td class="num">${x.qty}</td><td class="num">${money(x.amt)}</td><td class="num">${money(x.paid)}</td><td colspan="2"></td></tr>`; })()}</table></div>`
+      : `<div class="lanes">${work.map(w => `<section class="lane${w.on.length ? '' : ' off'}">
+          <div class="lane-head"><b>${esc(w.d.name)}</b><span class="muted">${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></div>
+          <div class="shiftchips">${SLOTS.map(s => `<button class="chip${onShift(w.d.id, s) ? ' on' : ''}" data-shift="${w.d.id}" data-slot="${s}">${SLOT[s]}${onShift(w.d.id, s) ? '有班' : ''}</button>`).join('')}</div>
+          ${[...SLOTS, ''].map(s => { const l = w.list.filter(o => (o.delivery_slot || '') === s); if (s === '' && !l.length) return '';
+            return `<div class="slot-h">${slotText(s)} <span class="muted">${l.length}</span></div><div class="drop" data-drop="${w.d.id}" data-slot="${s}">${l.map(card).join('') || '<div class="muted hint">把單拖到這裡</div>'}</div>`; }).join('')}
+        </section>`).join('') || '<div class="card">還沒有師傅帳號，請到右上角 ⚙️ 設定新增師傅。</div>'}</div>`;
+    view.innerHTML = `<div class="row between" style="margin-bottom:10px"><div class="row">
+        <button class="ghost" data-day="${addDays(date, -1)}">‹</button><h2 style="margin:0">${dayText(date)}</h2><button class="ghost" data-day="${addDays(date, 1)}">›</button>
+        <div class="seg2"><a class="${isToday ? 'on' : ''}" href="#/today">今日</a><a class="${date === addDays(t, 1) ? 'on' : ''}" href="#/today/${addDays(t, 1)}">明日預約</a></div></div>
+      <div class="row"><div class="seg2"><a class="${mode === 'board' ? 'on' : ''}" data-mode="board">看板</a><a class="${mode === 'table' ? 'on' : ''}" data-mode="table">表格</a></div>
+        <a class="btn" href="#/shifts/${date}">排班</a><a class="btn primary" href="#/home">＋ 記單</a></div></div>
+      <div class="today-grid"><aside class="card pendcol drop" data-drop="" data-slot="">
+        <div class="row between"><b>待派 <span class="pill accent">${pend.length}</span></b></div>
+        ${groups.map(([s, l]) => `<div class="slot-h">${slotText(s)} <span class="muted">${l.length}</span></div>${l.map(card).join('')}`).join('') || '<div class="muted hint">全部派完了 👍</div>'}
+      </aside><div>${right}</div></div>`;
   };
+  const dispatch = (oid, driverId, slot) => {
+    const o = st.orders.find(x => x.id === oid); if (!o) return;
+    const d = drivers.find(x => x.id === driverId);
+    if (!driverId) {
+      if (o.status !== 'dispatched') return;
+      Object.assign(o, { status: 'new', driver_id: null, driver_name: null, _pending: true });
+      queue('POST', `/api/orders/${oid}/undispatch`, {}, '收回派單');
+      toast('已收回到待派');
+    } else {
+      if (o.driver_id === driverId && (o.delivery_slot || '') === slot && o.status === 'dispatched') return;
+      const body = { driver_id: driverId }; if (slot !== undefined) body.delivery_slot = slot;
+      Object.assign(o, { status: 'dispatched', driver_id: driverId, driver_name: d.name, _pending: true }, slot !== undefined ? { delivery_slot: slot || null } : {});
+      queue('POST', `/api/orders/${oid}/dispatch`, body, '派單');
+      toast(`已派給 ${d.name}${slot !== undefined ? '（' + slotText(slot) + '）' : ''}`, 'ok', lineAction({ ...o }));
+    }
+    draw();
+  };
+  draw();
+  S.live = true;
+  view.ondragstart = e => { const c = e.target.closest('.tcard'); if (!c) return; S.live = false; e.dataTransfer.setData('text/plain', c.dataset.o); e.dataTransfer.effectAllowed = 'move'; c.classList.add('dragging'); };
+  view.ondragend = e => { S.live = true; $$('.over', view).forEach(x => x.classList.remove('over')); const c = e.target.closest('.tcard'); if (c) c.classList.remove('dragging'); };
+  view.ondragover = e => { const z = e.target.closest('[data-drop]'); if (!z) return; e.preventDefault(); $$('.over', view).forEach(x => x !== z && x.classList.remove('over')); z.classList.add('over'); };
+  view.ondrop = e => {
+    const z = e.target.closest('[data-drop]'); if (!z) return; e.preventDefault();
+    const oid = +e.dataTransfer.getData('text/plain');
+    dispatch(oid, z.dataset.drop ? +z.dataset.drop : null, z.dataset.drop ? z.dataset.slot : undefined);
+  };
+  view.onchange = e => { const p = e.target.closest('[data-pick]'); if (p && p.value) dispatch(+p.dataset.pick, +p.value); };
+  view.onclick = e => {
+    const day = e.target.closest('[data-day]'); if (day) { location.hash = '#/today/' + day.dataset.day; return; }
+    const m = e.target.closest('[data-mode]'); if (m) { store.set('boardMode', m.dataset.mode); todayBoard(view, arg); return; }
+    const sh = e.target.closest('[data-shift]');
+    if (sh) {
+      const key = sh.dataset.shift + ':' + sh.dataset.slot, on = !st.shifts.includes(key);
+      st.shifts = on ? [...st.shifts, key] : st.shifts.filter(k => k !== key);
+      queue('PUT', '/api/shifts', { driver_id: +sh.dataset.shift, work_date: date, slot: sh.dataset.slot, on }, '排班');
+      draw(); return;
+    }
+    if (e.target.closest('select')) return;
+    const c = e.target.closest('[data-o],[data-open]'); if (c) location.hash = '#/order/' + (c.dataset.o || c.dataset.open);
+  };
+}
+
+// 排班：一天一張表，師傅 × 上午／下午／晚上
+async function shiftsPage(view, arg) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(arg || '') ? arg : today();
+  const [drivers, shifts] = await Promise.all([data('/api/drivers'), data('/api/shifts?date=' + date)]);
+  const on = new Set(shifts.map(x => x.driver_id + ':' + x.slot));
+  const draw = () => {
+    view.innerHTML = `<p><a href="#/dispatch">← 派送</a></p><div class="row between"><div class="row">
+      <button class="ghost" data-day="${addDays(date, -1)}">‹</button><h2 style="margin:0">排班　${dayText(date)}</h2><button class="ghost" data-day="${addDays(date, 1)}">›</button></div>
+      <div class="row"><button id="copy">照前一天排</button><a class="btn" href="#/today/${date}">看這天的單</a></div></div>
+      <p class="muted">點一下切換有班／沒班。沒排班的師傅在「今日待辦」會排到最後面、顏色變淡。</p>
+      <div class="card table-wrap"><table class="shift-table"><tr><th>師傅</th>${SLOTS.map(s => `<th>${SLOT[s]}</th>`).join('')}</tr>
+      ${drivers.map(d => `<tr><td><b>${esc(d.name)}</b></td>${SLOTS.map(s => `<td><button class="chip big${on.has(d.id + ':' + s) ? ' on' : ''}" data-d="${d.id}" data-s="${s}">${on.has(d.id + ':' + s) ? '有班' : '未排'}</button></td>`).join('')}</tr>`).join('')
+      || '<tr><td colspan="4" class="muted">還沒有師傅帳號</td></tr>'}</table></div>`;
+  };
+  draw();
+  view.onclick = async e => {
+    const day = e.target.closest('[data-day]'); if (day) { location.hash = '#/shifts/' + day.dataset.day; return; }
+    if (e.target.id === 'copy') {
+      if (!confirm(`把 ${dayText(addDays(date, -1))} 的班表整份套到 ${dayText(date)}？`)) return;
+      try { const l = await api('POST', '/api/shifts/copy', { from: addDays(date, -1), to: date }); on.clear(); l.forEach(x => on.add(x.driver_id + ':' + x.slot)); store.del('c:/api/shifts?date=' + date); toast('已照前一天排好', 'ok'); draw(); }
+      catch (err) { toast(err.message, 'bad'); }
+      return;
+    }
+    const b = e.target.closest('[data-d]'); if (!b) return;
+    const key = b.dataset.d + ':' + b.dataset.s, v = !on.has(key);
+    v ? on.add(key) : on.delete(key);
+    queue('PUT', '/api/shifts', { driver_id: +b.dataset.d, work_date: date, slot: b.dataset.s, on: v }, '排班');
+    draw();
+  };
+}
+
+// ---------------------------------------------------------------------
+// 訂單查詢：依配送日期區間；分頁看狀態、現金欠款、月結欠款
+// ---------------------------------------------------------------------
+const ORDER_TABS = [['all', '全部'], ['new', '還沒派'], ['dispatched', '配送中'], ['delivered', '已送達'], ['cancelled', '已取消'], ['cashdebt', '現金欠款'], ['monthlydebt', '月結欠款']];
+async function ordersQuery(view, arg) {
+  const tab = ORDER_TABS.some(([k]) => k === arg) ? arg : 'all';
+  const r = store.get('orderRange', null);
+  const range = r && r.from ? r : { from: today(), to: today() };
+  const head = `<p><a href="#/dispatch">← 派送</a></p><h2>訂單查詢</h2>
+    <div class="tabs">${ORDER_TABS.map(([k, t]) => `<a class="${k === tab ? 'on' : ''}" href="#/orders/${k}">${t}</a>`).join('')}</div>`;
+  if (tab === 'monthlydebt') {
+    const bal = (await data('/api/reports/customer-balance')).filter(b => b.billing_type === 'monthly' && b.balance > 0);
+    view.innerHTML = head + `<div class="card table-wrap"><table><tr><th>客戶</th><th class="num">買了</th><th class="num">付了</th><th class="num">還欠</th></tr>
+      ${bal.map(b => `<tr class="click" data-c="${b.customer_id}"><td>${esc(b.name)}</td><td class="num">${money(b.total_sales)}</td><td class="num">${money(b.total_paid)}</td><td class="num"><b>${money(b.balance)}</b></td></tr>`).join('')
+      || '<tr><td class="muted" colspan="4">月結客戶都付清了 👍</td></tr>'}
+      ${bal.length ? `<tr class="total"><td>合計 ${bal.length} 位</td><td></td><td></td><td class="num">${money(bal.reduce((s, b) => s + b.balance, 0))}</td></tr>` : ''}</table></div>`;
+    view.onclick = e => { const tr = e.target.closest('[data-c]'); if (tr) location.hash = '#/customers/' + tr.dataset.c; };
+    return;
+  }
+  const q = tab === 'cashdebt' ? '/api/orders?debt=cash&limit=1000'
+    : `/api/orders?limit=1000&from=${range.from}&to=${range.to}${tab !== 'all' ? '&status=' + tab : ''}`;
+  const list = await data(q);
+  const t = today(), m0 = t.slice(0, 8) + '01', lm = addDays(m0, -1);
+  view.innerHTML = head + (tab === 'cashdebt' ? '<p class="muted">送到了，但收的錢跟金額對不上的現結單（全部日期）。</p>' : `
+    <div class="row" style="margin-bottom:10px"><span class="muted">配送日期</span><input type="date" id="from" value="${range.from}" style="width:auto"> 到 <input type="date" id="to" value="${range.to}" style="width:auto">
+      <button data-r="${t},${t}">今天</button><button data-r="${addDays(t, 1)},${addDays(t, 1)}">明天</button><button data-r="${m0},${t}">本月</button><button data-r="${lm.slice(0, 8)}01,${lm}">上月</button></div>`) + `
+    <div class="card table-wrap"><table><tr><th>單號</th><th>客戶</th><th>狀態</th><th>配送日</th><th>品項</th><th class="num">金額</th><th class="num">已收</th><th>師傅</th></tr>
+    ${list.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${esc(o.customer_name)}</td><td><span class="pill ${o.status === 'delivered' ? 'ok' : o.status === 'cancelled' ? 'bad' : o.status === 'new' ? 'accent' : 'blue'}">${STATUS[o.status]}</span></td>
+      <td>${esc((o.delivery_date || '').slice(5).replace('-', '/'))} ${o.delivery_slot ? SLOT[o.delivery_slot] : ''}</td><td>${esc(o.summary || '')}</td><td class="num">${money(o.total_amount)}</td>
+      <td class="num">${o.status === 'delivered' ? money(o.paid_amount) : ''}</td><td>${esc(o.driver_name || '')}</td></tr>`).join('') || '<tr><td colspan="8" class="muted">沒有訂單</td></tr>'}
+    ${list.length ? `<tr class="total"><td colspan="5">合計 ${list.length} 單</td><td class="num">${money(list.reduce((s, o) => s + o.total_amount, 0))}</td><td class="num">${money(list.reduce((s, o) => s + (o.paid_amount || 0), 0))}</td><td></td></tr>` : ''}</table></div>`;
+  const setRange = (from, to) => { store.set('orderRange', { from, to }); ordersQuery(view, arg); };
+  view.onchange = e => { if (e.target.id === 'from' || e.target.id === 'to') setRange($('#from').value, $('#to').value || $('#from').value); };
+  view.onclick = e => {
+    const b = e.target.closest('[data-r]'); if (b) { const [f, to] = b.dataset.r.split(','); setRange(f, to); return; }
+    const tr = e.target.closest('[data-o]'); if (tr) location.hash = '#/order/' + tr.dataset.o;
+  };
+}
+
+// ---------------------------------------------------------------------
+// 來電歷史：誰打來、有沒有下單；未處理的可以按「已處理」
+// ---------------------------------------------------------------------
+async function callHistory(view, arg) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(arg || '') ? arg : today();
+  const [list, un] = await Promise.all([data('/api/calls/history?from=' + date), data('/api/calls/history?unhandled=1')]);
+  view.innerHTML = `<p><a href="#/home">← 首頁</a></p><div class="row between"><div class="row">
+      <button class="ghost" data-day="${addDays(date, -1)}">‹</button><h2 style="margin:0">來電歷史　${dayText(date)}</h2><button class="ghost" data-day="${addDays(date, 1)}">›</button></div>
+      <input type="date" id="d" value="${date}" style="width:auto"></div>
+    ${un.length ? `<div class="card" style="border-color:var(--accent)"><h3 style="margin-top:0">未處理來電 <span class="pill accent">${un.length}</span> <span class="muted">（最近 3 天打來、還沒下單的）</span></h3>
+      ${un.map(callLine).join('')}</div>` : ''}
+    <div class="card table-wrap"><table><tr><th>時間</th><th>來電號碼</th><th>客戶</th><th>下訂狀態</th></tr>
+    ${list.map(l => `<tr><td>${hhmm(l.received_at)}</td><td>${esc(fmtPhone(l.phone))}${l.source === 'test' ? ' <span class="pill">模擬</span>' : ''}</td>
+      <td>${l.customer_id ? `<a href="#/customers/${l.customer_id}">${esc(l.customer_name)}</a>` : '<span class="muted">—</span>'}</td>
+      <td>${l.order_no ? `<span class="pill ok">${esc(l.order_no)}</span>` : l.handled_at ? '<span class="pill">已處理</span>' : l.customer_id ? `<button class="ghost" data-take="${l.id}">記單</button>` : `<button class="ghost" data-newc="${esc(l.phone)}">新增顧客</button>`}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="muted">這天沒有來電</td></tr>'}</table></div>`;
+  bindCallLines(view, () => callHistory(view, arg), list.concat(un));
+  view.addEventListener('click', e => { const d = e.target.closest('[data-day]'); if (d) location.hash = '#/calls/' + d.dataset.day; });
+  $('#d').onchange = e => { location.hash = '#/calls/' + e.target.value; };
+}
+// 一通未處理來電（首頁左邊、來電歷史共用）
+function callLine(l) {
+  return `<div class="unrow"><div class="grow"><b class="tel">${esc(fmtPhone(l.phone))}</b> <span class="muted">${esc((l.received_at || '').slice(5, 16).replace('-', '/'))}</span><br>
+    ${l.customer_id ? `${esc(l.customer_name)}・<span class="muted">${esc(l.address || '')}</span>` : '<span class="pill bad">陌生號碼</span>'}</div>
+    <div class="row" style="gap:4px">${l.customer_id ? `<button data-take="${l.id}">記單</button>` : `<button data-newc="${esc(l.phone)}">＋新增客戶</button>`}<button class="ghost" data-handled="${l.id}">已處理</button></div></div>`;
+}
+function bindCallLines(root, reload, calls) {
+  root.onclick = async e => {
+    const h = e.target.closest('[data-handled]');
+    if (h) { try { await api('POST', `/api/calls/${h.dataset.handled}/handled`, {}); store.del('c:/api/calls/history?unhandled=1'); toast('已標記處理'); reload(); } catch (err) { toast(err.message, 'bad'); } return; }
+    const tk = e.target.closest('[data-take]');
+    if (tk) { const l = calls.find(x => String(x.id) === tk.dataset.take); S.takeCall = { id: l.id, phone: l.phone, customer_id: l.customer_id }; location.hash = '#/home'; return; }
+    const nc = e.target.closest('[data-newc]');
+    if (nc) { const k = calls.find(x => x.phone === nc.dataset.newc); customerDialog({ phone: nc.dataset.newc }, c => { S.takeCall = { id: k && k.id, phone: nc.dataset.newc, customer_id: c.id }; location.hash = '#/home'; }); }
+  };
+}
+
+// ---------------------------------------------------------------------
+// 儀表板
+// ---------------------------------------------------------------------
+const pct = (now, before) => before ? Math.round((now - before) / before * 100) : null;
+const trend = (now, before, label) => { const p = pct(now, before); return p == null ? `<span class="muted">${label}沒有資料</span>` : `<span class="trend ${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p)}%</span> <span class="muted">比${label}</span>`; };
+// 單一數列的長條圖（SVG）：滑過去看數字
+function bars(values, labels, opts = {}) {
+  const w = opts.w || 640, h = opts.h || 180, pad = 22, max = Math.max(1, ...values), bw = (w - pad) / values.length;
+  return `<svg class="bars" viewBox="0 0 ${w} ${h + 22}" role="img" aria-label="${esc(opts.title || '')}">
+    <line x1="${pad}" y1="${h}" x2="${w}" y2="${h}" class="axis"/>
+    ${values.map((v, i) => { const bh = v ? Math.max(3, v / max * (h - 18)) : 0, x = pad + i * bw + bw * 0.18, ww = bw * 0.64;
+      return `<g class="bar"><title>${esc(labels[i])}：${opts.money ? money(v) : v}</title><rect class="hit" x="${pad + i * bw}" y="0" width="${bw}" height="${h}"/>
+        ${bh ? `<path d="M${x},${h} v${-(bh - 4)} q0,-4 4,-4 h${ww - 8} q4,0 4,4 v${bh - 4} z"/>` : ''}
+        ${opts.showValues && v ? `<text x="${x + ww / 2}" y="${h - bh - 5}" class="val">${opts.money ? (v >= 10000 ? (v / 10000).toFixed(1) + '萬' : v.toLocaleString()) : v}</text>` : ''}
+        ${i % (opts.every || 1) === 0 ? `<text x="${pad + i * bw + bw / 2}" y="${h + 16}" class="lab">${esc(labels[i])}</text>` : ''}</g>`; }).join('')}</svg>`;
+}
+async function dashboardPage(view) {
+  const period = store.get('dashPeriod', 'day');
+  const d = await data('/api/reports/dashboard?period=' + period);
+  const avg = Math.round(d.sales_30d / 30);
+  const rate = d.due_today ? Math.round(d.done_today / d.due_today * 100) : 0;
+  const gs = d.gas_sales || [], gmax = Math.max(1, ...gs.map(g => g.qty));
+  view.innerHTML = `<p><a href="#/money">← 帳務</a></p><h2>儀表板 <span class="muted">${dayText(d.today)}</span></h2>
+    <div class="kpis">
+      <div class="card kpi"><div class="muted">今天已送達的金額</div><div class="kv">${money(d.sales_today)}</div>
+        <div>${trend(d.sales_today, d.sales_yesterday, '昨天')}</div><div class="muted">近 30 天平均每天 ${money(avg)}</div></div>
+      <div class="card kpi"><div class="muted">今天接單</div><div class="kv">${d.orders_today} <small>張</small></div>
+        <div>${trend(d.orders_today, d.orders_yesterday, '昨天')}</div>${bars(d.hourly, d.hourly.map((_, i) => i + '點'), { h: 60, w: 300, every: 6, title: '每小時接單' })}</div>
+      <div class="card kpi"><div class="muted">今天派出去</div><div class="kv">${d.dispatched_today} <small>張</small></div></div>
+      <div class="card kpi"><div class="muted">今天要送的完成率</div><div class="kv">${rate}%</div>
+        <div class="meter"><span style="width:${rate}%"></span></div><div class="muted">${d.done_today}/${d.due_today} 張，還剩 ${d.due_today - d.done_today} 張${d.overdue ? `；<b style="color:var(--bad)">逾期 ${d.overdue} 張</b>` : ''}</div></div>
+    </div>
+    <div class="dash2">
+      <div class="card"><div class="row between"><h3 style="margin:0">瓦斯品項銷售</h3>
+        <div class="seg2">${[['day', '當日'], ['week', '當週'], ['month', '當月']].map(([k, t]) => `<a class="${k === period ? 'on' : ''}" data-p="${k}">${t}</a>`).join('')}</div></div>
+        ${gs.length ? `<table class="gs">${gs.map(g => `<tr><td>${esc(g.name)}</td><td style="width:45%"><div class="hbar"><span style="width:${g.qty / gmax * 100}%"></span></div></td><td class="num">${g.qty} 支</td><td class="num">${money(g.amount)}</td></tr>`).join('')}
+          <tr class="total"><td>合計</td><td></td><td class="num">${gs.reduce((s, g) => s + g.qty, 0)} 支</td><td class="num">${money(gs.reduce((s, g) => s + g.amount, 0))}</td></tr></table>`
+          : '<div class="muted" style="padding:30px;text-align:center">這段期間還沒有送達的瓦斯</div>'}</div>
+      <div class="card"><h3 style="margin-top:0">營業額</h3>
+        <div class="kpis two"><div><div class="muted">本週</div><div class="kv">${money(d.sales_week)}</div><div>${trend(d.sales_week, d.sales_last_week, '上週同期')}</div></div>
+          <div><div class="muted">本月</div><div class="kv">${money(d.sales_month)}</div><div>${trend(d.sales_month, d.sales_last_month, '上月同期')}</div></div></div>
+        <h3>今年每個月</h3>${bars(d.months, d.months.map((_, i) => (i + 1) + '月'), { money: true, showValues: true, title: '每月營業額' })}</div>
+    </div>
+    <p class="muted">營業額＝已送達訂單的金額，日期看送達那天。</p>`;
+  view.onclick = e => { const p = e.target.closest('[data-p]'); if (p) { store.set('dashPeriod', p.dataset.p); dashboardPage(view); } };
 }
 
 // 訂單詳情
@@ -474,9 +752,10 @@ async function orderDetail(view, id) {
   S.live = false;
   const [o, drivers] = await Promise.all([api('GET', '/api/orders/' + id), data('/api/drivers')]);
   const editable = o.status === 'new' || o.status === 'dispatched';
-  view.innerHTML = `<p><a href="#/orders">← 回訂單</a></p>
+  view.innerHTML = `<p><a href="javascript:history.back()">← 回上一頁</a></p>
     <div class="card"><div class="row between"><h2 style="margin:0">${esc(o.order_no)}　${esc(o.customer_name)}</h2>
       <span class="pill ${o.status === 'delivered' ? 'ok' : o.status === 'cancelled' ? 'bad' : 'accent'}">${STATUS[o.status]}</span></div>
+      <p>配送 <b>${dayText(o.delivery_date)} ${slotText(o.delivery_slot)}</b>${editable ? ' <button class="ghost" id="resched">改日期／時段</button>' : ''}</p>
       <p>${esc(o.address)}　${esc(o.phone || '')}　${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : '現結・' + (o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : '現金')}
       ${o.needs_invoice ? `<span class="pill">開發票 ${esc(o.tax_id || '')}</span>` : ''}</p>
       <div class="table-wrap"><table><tr><th>商品</th><th class="num">數量</th><th class="num">單價</th><th class="num">折扣</th><th class="num">金額</th><th class="num">回收空瓶</th></tr>
@@ -493,6 +772,18 @@ async function orderDetail(view, id) {
         ${o.status === 'delivered' && S.me.role === 'admin' ? '<button class="danger" id="undeliver">改回未送達</button>' : ''}
       </div></div>`;
   const reload = () => orderDetail(view, id);
+  const rs = $('#resched');
+  if (rs) rs.onclick = () => {
+    const dlg = $('#dlg');
+    dlg.innerHTML = `<form><h2>改配送日期／時段</h2><label>配送日</label><input type="date" name="d" value="${o.delivery_date || today()}">
+      <label>時段</label><select name="s">${[['', '不指定'], ...SLOTS.map(x => [x, SLOT[x]])].map(([k, v]) => `<option value="${k}" ${(o.delivery_slot || '') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+      <p class="row"><button class="primary">儲存</button><button type="button" onclick="this.closest('dialog').close()">取消</button></p></form>`;
+    $('form', dlg).onsubmit = async e => {
+      e.preventDefault();
+      try { await api('PUT', '/api/orders/' + id, { delivery_date: e.target.d.value, delivery_slot: e.target.s.value }); dlg.close(); toast('已改', 'ok'); reload(); } catch (err) { toast(err.message, 'bad'); }
+    };
+    dlg.showModal();
+  };
   $('#saveNote').onclick = async () => { await api('PUT', '/api/orders/' + id, { note: $('#note').value }); toast('已儲存', 'ok'); };
   if (editable) {
     $('#drv').onchange = async e => { if (!e.target.value) return; const d = drivers.find(x => x.id === +e.target.value);
@@ -509,20 +800,23 @@ async function orderDetail(view, id) {
 }
 
 // ---------------------------------------------------------------------
-// 電腦版：記單
+// 首頁（接單）：左邊來電和找客戶、中間挑品項、右邊下單
 // ---------------------------------------------------------------------
 async function officeNew(view) {
   S.live = false;
   const [products, drivers] = await Promise.all([data('/api/products'), data('/api/drivers')]);
-  const st = { customer: null, qty: {}, results: [] };
+  const t = today();
+  const st = { customer: null, qty: {}, results: [], date: t, slot: '', driver: null, shifts: [], callId: null, pay: 'cash' };
   const sellable = products.filter(p => p.category !== 'empty_cylinder');
-  view.innerHTML = `<h2>記單</h2><div class="new-grid"><div>
-    <section class="card callstack" id="calls" hidden></section>
-    <section class="card"><label style="margin-top:0">找客戶（電話、名字、地址）</label>
-      <input id="q" placeholder="輸入後按 Enter 選第一個" autocomplete="off">
-      <div class="results" id="results"></div>
-      <p><button class="ghost" id="newCust">＋ 新客戶</button></p></section></div>
-    <section class="card" id="right"><div class="muted">先在左邊選客戶</div></section></div>`;
+  view.innerHTML = `<div class="home-grid"><div class="home-left">
+      <section class="card callstack" id="calls" hidden></section>
+      <section class="card" id="unhandled" hidden></section>
+      <section class="card"><label style="margin-top:0">找客戶（電話、名字、地址、編號）</label>
+        <input id="q" placeholder="輸入後按 Enter 選第一個" autocomplete="off">
+        <div class="results" id="results"></div>
+        <div class="row between" style="margin-top:8px"><button class="ghost" id="newCust">＋ 新客戶</button><a class="muted" href="#/calls">📜 歷史來電 ›</a></div></section></div>
+    <section class="card" id="mid"><div class="muted empty">先在左邊選客戶，或點一通來電</div></section>
+    <section class="card" id="right"></section></div>`;
   const q = $('#q');
   q.focus();
   let timer;
@@ -530,12 +824,12 @@ async function officeNew(view) {
     const v = q.value.trim();
     st.results = v ? await api('GET', '/api/customers?limit=30&q=' + encodeURIComponent(v)).catch(() => {
       const all = store.get('c:/api/customers?limit=1000', []);
-      return all.filter(c => [c.name, c.phone, c.other_phones, c.address].some(x => (x || '').includes(v))).slice(0, 30);
+      return all.filter(c => [c.name, c.phone, c.other_phones, c.address, c.code].some(x => (x || '').includes(v))).slice(0, 30);
     }) : [];
     renderResults(v);
   };
   const renderResults = (v = q.value.trim()) => {
-    $('#results').innerHTML = st.results.map((c, i) => `<div class="result" data-i="${i}"><b>${esc(c.name)}</b> <span class="muted">${esc(c.phone || '')}</span>
+    $('#results').innerHTML = st.results.map((c, i) => `<div class="result${st.customer && st.customer.id === c.id ? ' on' : ''}" data-i="${i}"><b>${esc(c.name)}</b> <span class="muted">${esc(c.phone || '')}</span>
       <div class="muted">${esc(c.address)}${c.billing_type === 'monthly' ? '・月結' : ''}${c.balance > 0 ? '・欠 ' + money(c.balance) : ''}</div></div>`).join('')
       || (v ? '<div class="muted">找不到，按「＋ 新客戶」</div>' : '');
   };
@@ -544,7 +838,7 @@ async function officeNew(view) {
   $('#results').onclick = e => { const r = e.target.closest('.result'); if (r) pick(st.results[+r.dataset.i]); };
   $('#newCust').onclick = () => customerDialog({ phone: /^\d+$/.test(q.value.trim()) ? q.value.trim() : '', name: /^\d+$/.test(q.value.trim()) ? '' : q.value.trim() }, c => pick(c));
 
-  // 來電排隊
+  // 來電排隊（電話正在響的）
   const drawCalls = () => {
     const box = $('#calls'); if (!box) return;
     const wait = S.calls.filter(k => k.state === 'wait').length;
@@ -556,8 +850,8 @@ async function officeNew(view) {
   const takeCall = k => {
     st.callId = k.id;
     const c = (k.matches || [])[0];
-    if (c) { q.value = fmtPhone(k.phone); st.results = k.matches; renderResults(); pick(c); }
-    else { drawCalls(); customerDialog({ phone: k.phone }, nc => { st.results = [nc]; renderResults(); pick(nc); }); }
+    if (c) { q.value = fmtPhone(k.phone); st.results = k.matches; renderResults(); pick(c, true); }
+    else { drawCalls(); customerDialog({ phone: k.phone }, nc => { st.results = [nc]; renderResults(); pick(nc, true); }); }
   };
   const nextCall = () => [...S.calls].reverse().find(k => k.state === 'wait');
   $('#calls').onclick = e => {
@@ -571,87 +865,160 @@ async function officeNew(view) {
       // 手上沒有在記的客人才自動帶出來；正在記別人就只排進清單
       if (!st.customer) takeCall(S.calls.find(k => k.id === call.id)); else drawCalls();
       const r = $(`[data-call="${call.id}"]`); if (r) r.classList.add('flash');
+      drawUnhandled();
     },
   };
   window.addEventListener('hashchange', () => { S.newPage = null; }, { once: true });
-  drawCalls();
-  const first = nextCall(); if (first && Date.now() - (first.ts || 0) < 10 * 60000) takeCall(first);
 
-  function pick(c) {
+  // 未處理來電（打來了但還沒下單；重開程式也不會不見）
+  let unhandled = [];
+  const drawUnhandled = async () => {
+    unhandled = await api('GET', '/api/calls/history?unhandled=1').catch(() => store.get('c:/api/calls/history?unhandled=1', []));
+    store.set('c:/api/calls/history?unhandled=1', unhandled);
+    const box = $('#unhandled'); if (!box) return;
+    const live = new Set(S.calls.filter(k => k.state === 'wait').map(k => k.id));
+    const list = unhandled.filter(l => !live.has(l.id));
+    box.hidden = !list.length;
+    box.innerHTML = `<b>☎ 未處理來電 <span class="pill bad">${list.length}</span></b> <span class="muted">沒下單、還沒回撥</span>${list.map(callLine).join('')}`;
+  };
+  $('#unhandled').onclick = async e => {
+    const h = e.target.closest('[data-handled]');
+    if (h) { try { await api('POST', `/api/calls/${h.dataset.handled}/handled`, {}); toast('已標記處理'); drawUnhandled(); } catch (err) { toast(err.message, 'bad'); } return; }
+    const tk = e.target.closest('[data-take]');
+    if (tk) { const l = unhandled.find(x => String(x.id) === tk.dataset.take); takeServerCall(l); return; }
+    const nc = e.target.closest('[data-newc]');
+    if (nc) { const l = unhandled.find(x => x.phone === nc.dataset.newc); customerDialog({ phone: nc.dataset.newc }, c => { st.callId = l && l.id; pick(c, true); }); }
+  };
+  const takeServerCall = async l => {
+    st.callId = l.id || null;
+    q.value = fmtPhone(l.phone);
+    if (!l.customer_id) return customerDialog({ phone: l.phone }, c => pick(c, true));
+    const c = await api('GET', '/api/customers/' + l.customer_id).catch(() => null);
+    if (c) pick(c, true);
+    if (!l.id) q.value = '';
+  };
+  drawCalls();
+  drawUnhandled();
+  if (S.takeCall) { const k = S.takeCall; S.takeCall = null; takeServerCall(k); }
+  else { const first = nextCall(); if (first && Date.now() - (first.ts || 0) < 10 * 60000) takeCall(first); }
+
+  function pick(c, keepCall) {
+    if (!keepCall) st.callId = null;
     st.customer = c; st.qty = {};
-    drawCalls();
-    $$('.result').forEach(r => r.classList.toggle('on', st.results[+r.dataset.i] === c));
-    renderRight();
+    drawCalls(); renderResults();
+    renderMid();
   }
-  function lineTotal() {
-    return Object.entries(st.qty).reduce((s, [pid, n]) => {
-      const p = products.find(x => x.id === +pid); const sp = (st.customer.prices || []).find(x => x.product_id === +pid);
-      return s + n * (sp ? sp.price : p.sale_price);
-    }, 0);
-  }
-  async function renderRight() {
+  const priceOf = pid => { const p = products.find(x => x.id === +pid); const sp = ((st.customer && st.customer.prices) || []).find(x => x.product_id === +pid); return sp ? sp.price : (p ? p.sale_price : 0); };
+  const total = () => Object.entries(st.qty).reduce((s, [pid, n]) => s + n * priceOf(pid), 0);
+
+  async function renderMid() {
     const c = st.customer;
+    $('#mid').innerHTML = `<div class="big">${esc(c.name)}</div><div class="muted">載入中…</div>`;
     const full = await api('GET', '/api/customers/' + c.id).catch(() => c);
     st.customer = { ...c, ...full };
-    const def = drivers.find(d => d.id === st.customer.default_driver_id);
+    const cu = st.customer;
+    if (cu.default_driver_id && !st.driver) st.driver = cu.default_driver_id;
+    const fav = (cu.favorites && cu.favorites.frequent) || [], last = cu.favorites && cu.favorites.last;
     const gas = sellable.filter(p => p.category === 'gas'), others = sellable.filter(p => p.category !== 'gas');
-    $('#right').innerHTML = `<div class="row between"><div><span class="big">${esc(c.name)}</span> <span class="muted">${esc(c.phone || '')}</span></div>
-        <a href="#/customers/${c.id}" class="muted">客戶資料</a></div>
-      <div>${esc(c.address)}${c.floor ? '・' + esc(c.floor) : ''}${c.has_elevator === 0 ? '・<b>無電梯</b>' : ''}
-        ${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}${st.customer.balance > 0 ? `<span class="pill bad">欠 ${money(st.customer.balance)}</span>` : ''}
-        ${c.needs_invoice ? `<span class="pill">開發票 ${esc(c.tax_id || '')}</span>` : ''}</div>
-      ${c.note ? `<div class="muted">📝 ${esc(c.note)}</div>` : ''}
-      ${c.open_orders > 0 ? `<div class="call-warn">⚠ 已經有 ${c.open_orders} 張單還沒送到，可能是來催的</div>` : ''}
-      ${c.last_order ? `<div class="call-last">上次 <b>${c.last_order.days_ago <= 0 ? '今天' : c.last_order.days_ago + ' 天前'}</b>：${esc(c.last_order.items || '')}・${money(c.last_order.total_amount)}${c.last_order.driver_name ? '・' + esc(c.last_order.driver_name) + ' 送' : ''}</div>` : ''}
-      <h3>瓦斯</h3><div class="quick">${gas.map(qbox).join('') || '<div class="muted">還沒有瓦斯商品，請到「商品」新增</div>'}</div>
-      ${others.length ? `<h3>其他商品</h3><div class="quick">${others.map(qbox).join('')}</div>` : ''}
-      ${c.billing_type === 'monthly' ? '' : `<label>付款方式</label><div class="segment" id="pay"><button type="button" class="on" data-m="cash">現金</button><button type="button" data-m="transfer">轉帳</button></div>`}
-      <label>備註（給師傅看）</label><input id="note" placeholder="例如：放後門、下午 3 點後">
-      <div class="total-bar"><span>合計</span><span id="total">${money(0)}</span></div>
-      <label>派給</label><div class="row" id="drivers">${drivers.map(d => `<button data-d="${d.id}" ${def && def.id === d.id ? 'class="primary"' : ''}>${esc(d.name)}</button>`).join('')}<button data-d="">先不派</button></div>
-      <p><button class="primary lg" id="create">建立訂單（Enter）</button></p>`;
-    st.driver = def ? def.id : null;
-    const box = $('#right');
-    box.onclick = e => {
+    $('#mid').innerHTML = `<div class="row between"><div><span class="cust-name" style="font-size:24px">${esc(cu.name)}</span> <span class="muted">${cu.code ? '編號 ' + esc(cu.code) : ''}</span></div>
+        <a href="#/customers/${cu.id}" class="muted">客戶資料 ›</a></div>
+      <div>${esc(cu.address)}${cu.floor ? '・' + esc(cu.floor) : ''}${cu.has_elevator === 0 ? '・<b>無電梯</b>' : ''}　<span class="muted">${esc(cu.phone || '')}</span></div>
+      <div class="row" style="gap:4px;margin:6px 0">${cu.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}${cu.balance > 0 ? `<span class="pill bad">欠 ${money(cu.balance)}</span>` : ''}
+        ${cu.needs_invoice ? `<span class="pill">開發票 ${esc(cu.tax_id || '')}</span>` : ''}</div>
+      ${cu.open_orders > 0 ? `<div class="call-warn">⚠ 已經有 ${cu.open_orders} 張單還沒送到，可能是來催的</div>` : ''}
+      ${cu.order_note ? `<div class="order-note">📌 訂單常態備註：${esc(cu.order_note)}</div>` : ''}
+      ${cu.note ? `<div class="muted">📝 ${esc(cu.note)}</div>` : ''}
+      ${fav.length ? `<h3>常叫品項 <span class="muted">點一下加一支</span></h3><div class="chips">${fav.map(f => `<button class="chip fav" data-plus="${f.product_id}">${esc(f.name)}</button>`).join('')}</div>` : ''}
+      ${last && last.items && last.items.length ? `<div class="call-last">上一張單 ${esc((last.delivery_date || last.ordered_at || '').slice(5, 10).replace('-', '/'))}：${last.items.map(i => esc(i.name) + '×' + i.qty).join('、')}・${money(last.total_amount)}
+        <button class="ghost" id="rebuy">↻ 回購</button></div>` : ''}
+      <h3>瓦斯</h3><div class="quick">${gas.map(qbox).join('') || '<div class="muted">還沒有瓦斯商品，請到「商品庫存 → 商品」新增</div>'}</div>
+      ${others.length ? `<details ${others.some(p => st.qty[p.id]) ? 'open' : ''}><summary class="muted" style="margin:12px 0 6px;cursor:pointer">其他商品（${others.length}）</summary><div class="quick">${others.map(qbox).join('')}</div></details>` : ''}`;
+    $('#mid').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.id === 'rebuy') { st.qty = {}; last.items.forEach(i => { st.qty[i.product_id] = i.qty; }); sync(); toast('已照上一張單帶入'); return; }
       if (b.dataset.plus || b.dataset.minus) {
         const pid = b.dataset.plus || b.dataset.minus;
         st.qty[pid] = Math.max(0, (st.qty[pid] || 0) + (b.dataset.plus ? 1 : -1));
         if (!st.qty[pid]) delete st.qty[pid];
-        syncQty();
+        sync();
       }
-      if (b.dataset.m) $$('#pay button').forEach(x => x.classList.toggle('on', x === b));
-      if ('d' in b.dataset) { st.driver = b.dataset.d ? +b.dataset.d : null; $$('#drivers button').forEach(x => x.classList.toggle('primary', x === b)); }
-      if (b.id === 'create') create();
     };
-    box.oninput = e => { if (e.target.dataset.qty) { const n = parseInt(e.target.value) || 0; if (n > 0) st.qty[e.target.dataset.qty] = n; else delete st.qty[e.target.dataset.qty]; syncQty(true); } };
-    box.onkeydown = e => { if (e.key === 'Enter' && e.target.id !== 'note') create(); if (e.key === 'Enter' && e.target.id === 'note') create(); };
-    syncQty();
+    $('#mid').oninput = e => { if (e.target.dataset.qty) { const n = parseInt(e.target.value) || 0; if (n > 0) st.qty[e.target.dataset.qty] = n; else delete st.qty[e.target.dataset.qty]; sync(true); } };
+    $('#mid').onkeydown = e => { if (e.key === 'Enter' && e.target.dataset.qty) create(); };
+    await loadShifts();
+    sync();
   }
   function qbox(p) {
     const sp = (st.customer.prices || []).find(x => x.product_id === p.id);
     return `<div class="q" data-p="${p.id}"><div><b>${esc(p.name)}</b></div><div class="muted">${money(sp ? sp.price : p.sale_price)}${sp ? '（特價）' : ''}${p.stock_qty != null ? '・庫存 ' + p.stock_qty : ''}</div>
       <div class="stepper"><button data-minus="${p.id}">−</button><input data-qty="${p.id}" inputmode="numeric" value=""><button data-plus="${p.id}">＋</button></div></div>`;
   }
-  function syncQty(fromInput) {
-    $$('#right .q').forEach(el => {
+  async function loadShifts() {
+    st.shifts = await data('/api/shifts?date=' + st.date).catch(() => []);
+  }
+  const onShift = (d, s) => st.shifts.some(x => x.driver_id === d && (!s || x.slot === s));
+  function renderRight() {
+    const c = st.customer;
+    const items = Object.entries(st.qty);
+    const sorted = [...drivers].sort((a, b) => onShift(b.id, st.slot) - onShift(a.id, st.slot));
+    $('#right').innerHTML = `<h3 style="margin-top:0">新增訂單 ${c ? '<span class="muted">' + esc(c.name) + '</span>' : ''}</h3>
+      <label>配送日</label><div class="row" style="flex-wrap:nowrap"><input type="date" id="dd" value="${st.date}" min="${t}">
+        <button class="${st.date === t ? 'primary' : ''}" data-date="${t}">今天</button><button class="${st.date === addDays(t, 1) ? 'primary' : ''}" data-date="${addDays(t, 1)}">明天</button></div>
+      <label>時段</label><div class="segment" id="slot">${[['', '不指定'], ...SLOTS.map(s => [s, SLOT[s]])].map(([k, v]) => `<button type="button" class="${st.slot === k ? 'on' : ''}" data-slot="${k}">${v}</button>`).join('')}</div>
+      <label>師傅</label><select id="drv"><option value="">先不派（放待派）</option>${sorted.map(d => `<option value="${d.id}" ${st.driver === d.id ? 'selected' : ''}>${esc(d.name)}${st.slot ? (onShift(d.id, st.slot) ? `（${SLOT[st.slot]}有班）` : '（這時段沒班）') : (onShift(d.id) ? '（有排班）' : '（沒排班）')}</option>`).join('')}</select>
+      <div class="items">${items.map(([pid, n]) => { const p = products.find(x => x.id === +pid); return `<div class="row between item"><span class="grow">${esc(p ? p.name : '#' + pid)}</span>
+        <span class="stepper sm"><button data-minus="${pid}">−</button><b>${n}</b><button data-plus="${pid}">＋</button></span><span class="money" style="width:80px;text-align:right">${money(n * priceOf(pid))}</span></div>`; }).join('')
+        || `<div class="muted empty">${c ? '從中間點品項加進來' : '先選客戶'}</div>`}</div>
+      ${c && c.billing_type === 'monthly' ? '<div class="muted">月結客戶，不用收錢</div>' : `<label>收款方式</label><div class="segment" id="pay"><button type="button" class="${st.pay === 'cash' ? 'on' : ''}" data-m="cash">現金</button><button type="button" class="${st.pay === 'transfer' ? 'on' : ''}" data-m="transfer">轉帳</button></div>`}
+      <label>備註（給師傅看）</label><input id="note" placeholder="例如：放後門、下午 3 點後" value="${esc(st.note || '')}">
+      <div class="total-bar"><span>合計</span><span id="total">${money(total())}</span></div>
+      <button class="primary lg" id="create" ${c && items.length ? '' : 'disabled'}>送出訂單（Enter）</button>`;
+  }
+  function sync(fromInput) {
+    $$('#mid .q').forEach(el => {
       const n = st.qty[el.dataset.p] || 0;
       el.classList.toggle('has', n > 0);
       if (!fromInput) $('input', el).value = n || '';
     });
-    $('#total').textContent = money(lineTotal());
+    const note = $('#note'); if (note) st.note = note.value;
+    renderRight();
   }
+  const right = $('#right');
+  right.onclick = async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.date) { st.date = b.dataset.date; await loadShifts(); sync(); return; }
+    if ('slot' in b.dataset) { st.slot = b.dataset.slot; sync(); return; }
+    if (b.dataset.m) { st.pay = b.dataset.m; sync(); return; }
+    if (b.dataset.plus || b.dataset.minus) {
+      const pid = b.dataset.plus || b.dataset.minus;
+      st.qty[pid] = Math.max(0, (st.qty[pid] || 0) + (b.dataset.plus ? 1 : -1));
+      if (!st.qty[pid]) delete st.qty[pid];
+      sync(); return;
+    }
+    if (b.id === 'create') create();
+  };
+  right.onchange = async e => {
+    if (e.target.id === 'dd') { st.date = e.target.value || t; await loadShifts(); sync(); }
+    if (e.target.id === 'drv') st.driver = e.target.value ? +e.target.value : null;
+  };
+  right.oninput = e => { if (e.target.id === 'note') st.note = e.target.value; };
+  right.onkeydown = e => { if (e.key === 'Enter' && e.target.tagName !== 'SELECT' && e.target.type !== 'date') create(); };
+  renderRight();
+
   async function create() {
+    if (!st.customer) return toast('請先選客戶', 'bad');
     const items = Object.entries(st.qty).map(([pid, qty]) => ({ product_id: +pid, qty }));
-    if (!items.length) return toast('請選商品數量', 'bad');
-    const body = { customer_id: st.customer.id, items, note: $('#note').value || null };
-    const pay = $('#pay .on'); if (pay) body.pay_method = pay.dataset.m;
+    if (!items.length) return toast('請選品項', 'bad');
+    const note = [st.customer.order_note, st.note].filter(Boolean).join('；');
+    const body = { customer_id: st.customer.id, items, note: note || null, delivery_date: st.date, delivery_slot: st.slot || null };
+    if (st.customer.billing_type !== 'monthly') body.pay_method = st.pay;
     if (st.driver) body.driver_id = st.driver;
+    if (st.callId) body.call_id = st.callId;
     const btn = $('#create'); btn.disabled = true;
     try {
       const o = await api('POST', '/api/orders', body);
       const k = S.calls.find(x => x.id === st.callId); if (k) { k.state = 'done'; k.order_no = o.order_no; saveCalls(); }
-      toast(`已建立 ${o.order_no}${o.driver_name ? '，派給 ' + o.driver_name : ''}`, 'ok', o.driver_name ? lineAction(o) : null);
+      toast(`已建立 ${o.order_no}（${dayText(o.delivery_date)} ${slotText(o.delivery_slot)}）${o.driver_name ? '，派給 ' + o.driver_name : '，放在待派'}`, 'ok', o.driver_name ? lineAction(o) : null);
     } catch (e) {
       if (!e.network) { btn.disabled = false; return toast(e.message, 'bad'); }
       queue('POST', '/api/orders', body, '建立訂單');
@@ -856,7 +1223,8 @@ function customerFormHTML(c, drivers) {
     <div><label>結帳方式 <span class="muted">（沒勾＝現結）</span></label><label class="check-box"><input type="checkbox" name="monthly_box" ${c.billing_type === 'monthly' ? 'checked' : ''}>月結客戶</label></div>
     <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
     <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div></div>
-    <label>備註</label><textarea name="note">${esc(c.note || '')}</textarea>`;
+    <label>備註 <span class="muted">（店裡自己看）</span></label><textarea name="note">${esc(c.note || '')}</textarea>
+    <label>訂單常態備註 <span class="muted">（每張單自動帶給師傅，例如：不要給好桶、按對講機 2 樓）</span></label><input name="order_note" value="${esc(c.order_note || '')}">`;
 }
 function readCustomerForm(form) {
   const f = Object.fromEntries(new FormData(form));
@@ -924,31 +1292,55 @@ async function phonesDialog(id, onChange) {
 async function customerDetail(view, id) {
   S.live = false;
   const [c, drivers] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers')]);
-  view.innerHTML = `<p><a href="#/customers">← 回客戶</a></p>
-    <div class="card"><div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span></div>
-      <div class="row" style="margin:10px 0 4px"><span>買 ${money(c.total_sales)}・付 ${money(c.total_paid)}</span><span class="pill ${c.balance > 0 ? 'bad' : 'ok'}">${c.balance > 0 ? '欠 ' + money(c.balance) : '沒有欠款'}</span>
-      <button id="pay">記收款</button></div>
-      <form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
-        <label style="margin:0;color:var(--text)"><input type="checkbox" name="active_box" ${c.active ? '' : 'checked'}>停用這位客戶</label></p></form></div>
-    <div class="card table-wrap"><h3 style="margin-top:0">最近訂單</h3><table>
-      ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td class="num">${money(o.total_amount)}</td><td>${esc(o.delivered_at || o.ordered_at)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
-    ${legacyCustomerHTML(c.legacy)}`;
-  const reload = () => customerDetail(view, id);
-  $('#morePhones').onclick = () => phonesDialog(id, reload);
-  $('#f').onsubmit = async e => {
-    e.preventDefault();
-    const body = readCustomerForm(e.target); body.active = !e.target.active_box.checked; delete body.active_box;
-    try { await api('PUT', '/api/customers/' + id, body); toast('已儲存', 'ok'); } catch (err) { toast(err.message, 'bad'); }
+  const tab = store.get('custTab', 'info');
+  view.innerHTML = `<p><a href="#/customers">← 客戶清單</a></p>
+    <div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span>
+      ${c.needs_invoice ? '<span class="pill blue">要發票</span>' : ''}${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}
+      <span class="pill ${c.balance > 0 ? 'bad' : 'ok'}">${c.balance > 0 ? '欠 ' + money(c.balance) : '沒有欠款'}</span>${c.active ? '' : '<span class="pill bad">已停用</span>'}
+      <span class="grow"></span><button id="pay">記收款</button><button class="primary" id="order">＋ 記單</button></div>
+    <div class="hub small" id="ctabs">
+      ${[['info', '📇', '基本資料', `電話 ${1 + (c.phones || []).length} 支・${esc(c.address)}`],
+         ['orders', '🧾', '訂單', `最近 ${c.recent_orders.length} 張・共買 ${money(c.total_sales)}`],
+         ['pays', '💵', '付款紀錄', `共付 ${money(c.total_paid)}`],
+         ['note', '📝', '備註', c.order_note ? '常態備註：' + esc(c.order_note) : '還沒設常態備註']]
+        .map(([k, ic, t, d]) => `<a class="hubcard${k === tab ? ' hl' : ''}" data-tab="${k}"><div class="ic">${ic}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
+    <div class="card" id="csec"></div>`;
+  const sec = $('#csec');
+  const show = async k => {
+    store.set('custTab', k);
+    $$('#ctabs .hubcard').forEach(a => a.classList.toggle('hl', a.dataset.tab === k));
+    if (k === 'info' || k === 'note') {
+      sec.innerHTML = `<form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
+        <label style="margin:0;color:var(--text)"><input type="checkbox" name="active_box" ${c.active ? '' : 'checked'}>停用這位客戶</label></p></form>${legacyCustomerHTML(c.legacy)}`;
+      $('#morePhones').onclick = () => phonesDialog(id, reload);
+      if (k === 'note') { const n = $('[name=order_note]', sec); n.scrollIntoView({ block: 'center' }); n.focus(); }
+      $('#f').onsubmit = async e => {
+        e.preventDefault();
+        const body = readCustomerForm(e.target); body.active = !e.target.active_box.checked; delete body.active_box;
+        try { await api('PUT', '/api/customers/' + id, body); toast('已儲存', 'ok'); reload(); } catch (err) { toast(err.message, 'bad'); }
+      };
+    } else if (k === 'orders') {
+      sec.innerHTML = `<div class="table-wrap"><table><tr><th>單號</th><th>狀態</th><th>配送／送達</th><th class="num">金額</th></tr>
+        ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td>${esc(o.delivered_at || o.ordered_at)}</td><td class="num">${money(o.total_amount)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
+        <p><a href="#/orders">到訂單查詢看更多 ›</a></p>`;
+    } else if (k === 'pays') {
+      sec.innerHTML = '<div class="muted">載入中…</div>';
+      const pays = await api('GET', '/api/payments?customer_id=' + id).catch(() => []);
+      sec.innerHTML = `<div class="table-wrap"><table><tr><th>收款時間</th><th>方式</th><th class="num">金額</th><th>單號</th><th>收款人</th></tr>
+        ${pays.map(p => `<tr><td>${esc(p.received_at)}</td><td>${METHOD[p.method] || p.method}</td><td class="num">${money(p.amount)}</td><td>${esc(p.order_no || '')}</td><td>${esc(p.collected_by_name || '')}</td></tr>`).join('') || '<tr><td class="muted" colspan="5">還沒有付款紀錄</td></tr>'}</table></div>`;
+    }
   };
+  const reload = () => customerDetail(view, id);
+  show(tab);
+  $('#ctabs').onclick = e => { const a = e.target.closest('[data-tab]'); if (a) show(a.dataset.tab); };
+  $('#order').onclick = () => { S.takeCall = { customer_id: c.id, phone: c.phone || '' }; location.hash = '#/home'; };
   $('#pay').onclick = async () => {
     const v = prompt(`${c.name} 這次付多少錢？`, c.balance > 0 ? c.balance : '');
     if (!v) return;
     const method = confirm('是轉帳嗎？（確定 = 轉帳，取消 = 現金）') ? 'transfer' : 'cash';
     try { await api('POST', '/api/payments', { customer_id: +id, amount: parseInt(v), method }); toast('已記收款', 'ok'); reload(); } catch (err) { toast(err.message, 'bad'); }
   };
-  view.addEventListener('click', async e => {
-    const tr = e.target.closest('[data-o]'); if (tr) location.hash = '#/order/' + tr.dataset.o;
-  });
+  sec.onclick = e => { const tr = e.target.closest('[data-o]'); if (tr) location.hash = '#/order/' + tr.dataset.o; };
 }
 
 // ---------------------------------------------------------------------
@@ -1038,7 +1430,7 @@ async function settings(view) {
   const [sys, users, cfg] = await Promise.all([api('GET', '/api/system'), S.me.role === 'admin' ? api('GET', '/api/users') : [], api('GET', '/api/settings')]);
   const admin = S.me.role === 'admin';
   const [callCard, legacyCard] = await Promise.all([callSettingsCard(), legacySettingsCard()]);
-  view.innerHTML = `<h2>設定</h2>${callCard}${legacyCard}
+  view.innerHTML = `<h2>⚙️ 設定</h2>${callCard}${legacyCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -1060,6 +1452,7 @@ async function settings(view) {
     ${admin ? `<div class="card" id="upd"><h3 style="margin-top:0">🔄 程式更新</h3>
       <div>目前版本：<b>${esc(sys.version)}</b></div>
       <div id="updInfo" class="muted">${sys.update ? updText(sys.update) : ''}</div>
+      <label class="check-box"><input type="checkbox" id="autoUpd" ${cfg.auto_update === 'off' ? '' : 'checked'}>半夜 2～5 點有新版就自動更新（會先備份，不用按）</label>
       <p class="row"><button id="updCheck">檢查更新</button>
       <button class="primary" id="updApply" ${sys.update && sys.update.available && sys.local ? '' : 'hidden'}>立即更新</button></p>
       ${sys.local ? '' : '<div class="muted">更新只能在店裡的電腦上按。</div>'}</div>` : `<p class="muted">版本 ${esc(sys.version)}</p>`}`;
@@ -1068,6 +1461,7 @@ async function settings(view) {
   bindLegacySettings(view);
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   if (!admin) return;
+  $('#autoUpd').onchange = async e => { await api('PUT', '/api/settings', { auto_update: e.target.checked ? 'on' : 'off' }); toast(e.target.checked ? '已開啟半夜自動更新' : '已關閉半夜自動更新', 'ok'); };
   $('#updCheck').onclick = async () => {
     $('#updInfo').textContent = '檢查中…';
     try {
@@ -1185,6 +1579,7 @@ async function driverJobs(view) {
     ${list.map(o => `<div class="job">
       <div class="row between"><span class="name">${esc(o.customer_name)}</span><span class="big">${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : money(o.total_amount) + (o.pay_method === 'transfer' ? ' <span class="pill blue">轉帳</span>' : '')}</span></div>
       <div class="addr">${esc(o.address)}${o.floor ? '・' + esc(o.floor) : ''}${o.has_elevator === 0 ? '・<b>無電梯</b>' : ''}</div>
+      ${o.delivery_slot || (o.delivery_date && o.delivery_date !== today()) ? `<div><span class="pill accent">${o.delivery_date && o.delivery_date !== today() ? dayText(o.delivery_date) + ' ' : ''}${slotText(o.delivery_slot)}</span></div>` : ''}
       <div>${esc(o.summary || '')}</div>
       ${o.note ? `<div class="muted">📝 ${esc(o.note)}</div>` : ''}
       <div class="links"><a href="tel:${esc(o.phone || '')}">📞 打電話</a><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.address)}" target="_blank" rel="noopener">🧭 導航</a></div>
@@ -1257,7 +1652,7 @@ async function enablePush() {
 }
 
 // 電腦版快捷鍵：F2 記單
-document.addEventListener('keydown', e => { if (e.key === 'F2' && S.me && S.me.role !== 'driver') { e.preventDefault(); location.hash = '#/new'; } });
+document.addEventListener('keydown', e => { if (e.key === 'F2' && S.me && S.me.role !== 'driver') { e.preventDefault(); location.hash = '#/home'; } });
 
 // ---------------------------------------------------------------------
 // 啟動
