@@ -16,7 +16,7 @@ import (
 
 // 線上更新：新版放在 GitHub Releases，程式自己去抓。
 // 只認標籤是 V001、V002… 的正式版，其他（例如舊的 latest、測試版）不理。
-var releaseAPI = "https://api.github.com/repos/mcooice2/gas/releases?per_page=30"
+var releaseAPI = "https://api.github.com/repos/Hallowyeeee/gas/releases?per_page=30"
 
 type UpdateInfo struct {
 	Current     string `json:"current"`
