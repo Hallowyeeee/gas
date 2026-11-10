@@ -26,7 +26,7 @@ type orderIn struct {
 	NeedsInvoice *bool    `json:"needs_invoice"`
 	InvoiceNo    *string  `json:"invoice_no"`
 	BillingType  *string  `json:"billing_type"`
-	PayMethod    *string  `json:"pay_method"` // 現金 cash／轉帳 transfer
+	PayMethod    *string  `json:"pay_method"`    // 現金 cash／轉帳 transfer
 	DeliveryDate *string  `json:"delivery_date"` // 預約哪天送（YYYY-MM-DD，空白＝今天）
 	DeliverySlot *string  `json:"delivery_slot"` // am 上午／pm 下午／eve 晚上／空白＝不指定
 	CallID       *int64   `json:"call_id"`       // 從哪一通來電記的單（標記來電已處理）
