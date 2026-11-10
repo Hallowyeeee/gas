@@ -579,7 +579,7 @@ func (a *App) customerLegacy(ctx context.Context, id int64) (map[string]any, err
 		return nil, err
 	}
 	if out["deliveries"], err = rows(ctx, a.DB, `SELECT delivered_at, items, stored_gas, amount, cylinder, pay_status, driver_name, note
-		FROM legacy_deliveries WHERE customer_id = ? ORDER BY delivered_at DESC LIMIT 300`, id); err != nil {
+		FROM legacy_deliveries WHERE customer_id = ? ORDER BY delivered_at DESC`, id); err != nil {
 		return nil, err
 	}
 	if out["cylinders_out"], err = rows(ctx, a.DB, `SELECT barcode, cylinder_no, size, next_inspection, age_years, driver_name, out_at,

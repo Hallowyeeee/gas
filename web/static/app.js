@@ -1134,9 +1134,28 @@ function legacyCustomerHTML(lg) {
     ${lg.cylinders_out.length ? `<h4>出桶鋼瓶（在客人那邊）</h4><div class="table-wrap"><table><tr><th>條碼</th><th>規格</th><th>下次檢驗</th><th>桶齡</th><th>出桶</th><th class="num">天數</th><th>司機</th></tr>
       ${lg.cylinders_out.map(c => `<tr><td>${esc(c.barcode)}</td><td>${esc(c.size || '')}</td><td>${esc(c.next_inspection || '')}${c.next_inspection && c.next_inspection < today() ? ' <span class="pill bad">過期</span>' : ''}</td><td>${c.age_years ?? ''}</td><td>${esc((c.out_at || '').slice(0, 10))}</td><td class="num">${c.days ?? ''}</td><td>${esc(c.driver_name || '')}</td></tr>`).join('')}</table></div>` : ''}
     <h4>舊送貨紀錄 <span class="pill">${lg.deliveries.length}</span></h4>
-    <div class="table-wrap" style="max-height:360px;overflow:auto"><table><tr><th>日期</th><th>品項</th><th class="num">金額</th><th>鋼瓶</th><th>付款</th><th>送貨員</th><th>備註</th></tr>
-      ${lg.deliveries.map(x => `<tr><td style="white-space:nowrap">${esc(x.delivered_at.slice(0, 16))}</td><td>${esc(x.items || '')}${x.stored_gas ? ' 存氣 ' + x.stored_gas : ''}</td><td class="num">${money(x.amount)}</td><td>${esc(x.cylinder || '')}</td><td>${esc(x.pay_status || '')}</td><td>${esc(x.driver_name || '')}</td><td>${esc(x.note || '')}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div></div>`;
+    <div class="table-wrap legacy-deliv"><table><tr><th>日期</th><th>品項</th><th class="num">金額</th><th>鋼瓶</th><th>付款</th><th>送貨員</th><th>備註</th></tr>
+      ${lg.deliveries.map((x, i) => `<tr ${i >= LEGACY_FIRST ? 'hidden' : ''}><td style="white-space:nowrap">${esc(x.delivered_at.slice(0, 16))}</td><td>${esc(x.items || '')}${x.stored_gas ? ' 存氣 ' + x.stored_gas : ''}</td><td class="num">${money(x.amount)}</td><td>${esc(x.cylinder || '')}</td><td>${esc(x.pay_status || '')}</td><td>${esc(x.driver_name || '')}</td><td>${esc(x.note || '')}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table>
+      <div class="row legacy-more"></div></div></div>`;
 }
+// 舊送貨紀錄：先顯示 20 筆，每按一次多開 150 筆，可以收起
+const LEGACY_FIRST = 20, LEGACY_STEP = 150;
+function legacyMoreSync(box) {
+  const data = $$('table tr', box).slice(1);
+  const shown = data.filter(r => !r.hidden).length, left = data.length - shown;
+  $('.legacy-more', box).innerHTML = (left > 0 ? `<button type="button" data-lmore>再多看 ${Math.min(LEGACY_STEP, left)} 筆（還剩 ${left} 筆）</button>` : '')
+    + (shown > LEGACY_FIRST ? `<button type="button" class="ghost" data-lless>收起</button>` : '')
+    + (data.length > LEGACY_FIRST ? `<span class="muted">顯示 ${shown} / ${data.length} 筆</span>` : '');
+}
+document.addEventListener('click', e => {
+  const more = e.target.closest('[data-lmore]'), less = e.target.closest('[data-lless]');
+  if (!more && !less) return;
+  const box = e.target.closest('.legacy-deliv');
+  const data = $$('table tr', box).slice(1);
+  if (more) data.filter(r => r.hidden).slice(0, LEGACY_STEP).forEach(r => { r.hidden = false; });
+  else { data.forEach((r, i) => { r.hidden = i >= LEGACY_FIRST; }); box.scrollIntoView({ block: 'nearest' }); }
+  legacyMoreSync(box);
+});
 
 // 書籤小工具：在舊系統網頁裡按 F12，把目前的客戶頁送到這台電腦的瓦斯行程式
 function bookmarkletCode() {
@@ -1312,6 +1331,7 @@ async function customerDetail(view, id) {
     if (k === 'info' || k === 'note') {
       sec.innerHTML = `<form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
         <label style="margin:0;color:var(--text)"><input type="checkbox" name="active_box" ${c.active ? '' : 'checked'}>停用這位客戶</label></p></form>${legacyCustomerHTML(c.legacy)}`;
+  $$('.legacy-deliv').forEach(legacyMoreSync);
       $('#morePhones').onclick = () => phonesDialog(id, reload);
       if (k === 'note') { const n = $('[name=order_note]', sec); n.scrollIntoView({ block: 'center' }); n.focus(); }
       $('#f').onsubmit = async e => {
