@@ -20,3 +20,8 @@ var Phones string
 //
 //go:embed dispatch.sql
 var Dispatch string
+
+// Notify 是第 6 版：派單已讀、沒看到再提醒、每支手機通知有沒有收到。
+//
+//go:embed notify.sql
+var Notify string

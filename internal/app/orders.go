@@ -260,7 +260,7 @@ func (a *App) listOrders(r *http.Request, u *User) (any, error) {
 	return rows(r.Context(), a.DB, `
 		SELECT o.id, o.order_no, o.customer_id, c.name AS customer_name, o.address, o.phone, c.floor, c.has_elevator,
 		       o.status, o.billing_type, o.pay_method, o.driver_id, u.name AS driver_name, o.total_amount, o.note,
-		       o.ordered_at, o.dispatched_at, o.delivered_at, o.delivery_date, o.delivery_slot,
+		       o.ordered_at, o.dispatched_at, o.delivered_at, o.delivery_date, o.delivery_slot, o.seen_at, o.reminded_at,
 		       COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0) AS paid_amount,
 		       (SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary,
 		       (SELECT SUM(oi.qty) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id AND p.category = 'gas') AS gas_qty
@@ -374,8 +374,13 @@ func dispatchTx(ctx context.Context, tx *sql.Tx, id, driverID int64) error {
 	if err := tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ? AND active = 1`, driverID).Scan(&role); err != nil || role != "driver" {
 		return bad("請選擇師傅")
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE orders SET status = 'dispatched', driver_id = ?, dispatched_at = datetime('now','localtime')
-		WHERE id = ? AND status IN ('new','dispatched')`, driverID, id)
+	// 換師傅就重新算「看到了沒」；同一位師傅只是改時段，已看的不用再看
+	res, err := tx.ExecContext(ctx, `UPDATE orders SET status = 'dispatched',
+		seen_at = CASE WHEN status = 'dispatched' AND driver_id = ?1 THEN seen_at END,
+		reminded_at = CASE WHEN status = 'dispatched' AND driver_id = ?1 THEN reminded_at END,
+		dispatched_at = CASE WHEN status = 'dispatched' AND driver_id = ?1 THEN dispatched_at ELSE datetime('now','localtime') END,
+		driver_id = ?1
+		WHERE id = ?2 AND status IN ('new','dispatched')`, driverID, id)
 	if err != nil {
 		return err
 	}
@@ -404,6 +409,11 @@ func (a *App) dispatchOrder(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
+	// 同一位師傅只是改時段，不用再通知一次
+	var wasStatus string
+	var wasDriver sql.NullInt64
+	tx.QueryRowContext(ctx, `SELECT status, driver_id FROM orders WHERE id = ?`, id).Scan(&wasStatus, &wasDriver)
+	same := wasStatus == "dispatched" && wasDriver.Valid && wasDriver.Int64 == in.DriverID
 	if err := dispatchTx(ctx, tx, id, in.DriverID); err != nil {
 		return nil, err
 	}
@@ -420,7 +430,7 @@ func (a *App) dispatchOrder(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	o, err := a.loadOrder(ctx, id)
-	if err == nil && a.OnDispatch != nil {
+	if err == nil && !same && a.OnDispatch != nil {
 		a.OnDispatch(in.DriverID, o)
 	}
 	return o, err
@@ -519,7 +529,7 @@ func (a *App) undispatchOrder(r *http.Request, u *User) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := a.DB.ExecContext(r.Context(), `UPDATE orders SET status = 'new', driver_id = NULL, dispatched_at = NULL WHERE id = ? AND status = 'dispatched'`, id)
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE orders SET status = 'new', driver_id = NULL, dispatched_at = NULL, seen_at = NULL, reminded_at = NULL WHERE id = ? AND status = 'dispatched'`, id)
 	if err != nil {
 		return nil, err
 	}

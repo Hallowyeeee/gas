@@ -104,6 +104,20 @@ func migrate(db *sql.DB) error {
 				}
 			}
 		}
+		if i == 5 { // 第 6 版：派單已讀、沒看到再提醒、通知有沒有收到
+			for _, c := range [][3]string{
+				{"orders", "seen_at", "TEXT"},
+				{"orders", "reminded_at", "TEXT"},
+				{"push_subscriptions", "platform", "TEXT"},
+				{"push_subscriptions", "last_sent_at", "TEXT"},
+				{"push_subscriptions", "last_ack_at", "TEXT"},
+				{"push_subscriptions", "last_error", "TEXT"},
+			} {
+				if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
+					return err
+				}
+			}
+		}
 		if _, err := db.Exec(upgrades[i]); err != nil {
 			return fmt.Errorf("資料庫升級到第 %d 版失敗: %w", i+1, err)
 		}
@@ -141,6 +155,7 @@ var upgrades = []string{
 	2: gasdb.Legacy,
 	3: gasdb.Phones,
 	4: gasdb.Dispatch,
+	5: gasdb.Notify,
 }
 
 // ---------------------------------------------------------------------

@@ -55,6 +55,7 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("PUT /api/orders/{id}", a.route(a.updateOrder, office...))
 	m.HandleFunc("POST /api/orders/{id}/dispatch", a.route(a.dispatchOrder, office...))
 	m.HandleFunc("POST /api/orders/{id}/deliver", a.route(a.deliverOrder))
+	m.HandleFunc("POST /api/orders/seen", a.route(a.markSeen, driver))
 	m.HandleFunc("POST /api/orders/{id}/undispatch", a.route(a.undispatchOrder, office...))
 	m.HandleFunc("GET /api/shifts", a.route(a.listShifts, office...))
 	m.HandleFunc("PUT /api/shifts", a.route(a.setShift, office...))
@@ -137,6 +138,9 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/events", a.handleEvents)
 	m.HandleFunc("GET /api/push/key", a.route(a.pushKey))
 	m.HandleFunc("POST /api/push/subscribe", a.route(a.pushSubscribe))
+	m.HandleFunc("POST /api/push/ack", a.public(func(w http.ResponseWriter, r *http.Request) (any, error) { return a.pushAck(r, nil) }))
+	m.HandleFunc("POST /api/push/test", a.route(a.pushTest))
+	m.HandleFunc("GET /api/push/status", a.route(a.pushStatus, office...))
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "沒有這個功能"})

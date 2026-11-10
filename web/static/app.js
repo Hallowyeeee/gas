@@ -164,6 +164,23 @@ async function sendLine(order) {
 }
 const lineAction = o => ({ label: '傳 LINE', fn: () => sendLine(o) });
 
+// ---------------------------------------------------------------------
+// 派單通知：師傅看到了沒、每位師傅的通知燈號
+// ---------------------------------------------------------------------
+const parseLocal = s => s ? new Date(s.replace(' ', 'T')).getTime() : 0;
+function unseenLate(o, remind) {
+  return o.status === 'dispatched' && !o.seen_at && remind > 0 && o.dispatched_at && (Date.now() - parseLocal(o.dispatched_at)) / 60000 >= remind;
+}
+function seenPill(o, remind) {
+  if (o.status !== 'dispatched') return '';
+  if (o.seen_at) return `<span class="pill ok" title="師傅 ${esc(o.seen_at)} 看到">✓ 已看 ${hhmm(o.seen_at)}</span>`;
+  if (unseenLate(o, remind)) return '<span class="pill bad">⚠ 師傅還沒看</span>';
+  return '<span class="pill">未讀</span>';
+}
+const LIGHT = { ok: '通知正常', stale: '有開通知，但很久沒確認收到', bad: '沒開通知或通知送不到' };
+const lightDot = st => st ? `<span class="dot ${st.status}" title="${esc(LIGHT[st.status] || '')}"></span>` : '';
+async function pushStatus() { try { return await data('/api/push/status'); } catch { return { drivers: [], remind_minutes: 3 }; } }
+
 function beep() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -185,6 +202,7 @@ function connectEvents() {
     let e; try { e = JSON.parse(ev.data); } catch { return; }
     if (e.type === 'call' && S.me && S.me.role !== 'driver') { showCall(e.call); return; }
     if (e.type === 'capture' && S.me && S.me.role !== 'driver') { beep(); showCapture(e.capture.id); return; }
+    if (e.type === 'unseen' && S.me && S.me.role !== 'driver') { beep(); toast('⚠ ' + e.message, 'bad'); }
     if (e.type === 'dispatch') {
       beep();
       toast('🔔 新派單：' + e.message, 'ok');
@@ -384,6 +402,7 @@ async function route(soft) {
   const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送']] : OFFICE_NAV;
   if (lastShell !== S.me.role + S.me.id) {
     shell(nav); lastShell = S.me.role + S.me.id; connectEvents();
+    if (driver) syncPush();
     if (S.me.role === 'admin') api('GET', '/api/system').then(sys => {
       if (sys.update && sys.update.available) $('.nav').insertAdjacentHTML('beforeend', '<a href="#/settings" class="upd" style="color:var(--accent);font-weight:600">⬆ 有新版</a>');
     }).catch(() => { });
@@ -395,7 +414,7 @@ async function route(soft) {
   const gear = $('.gear'); if (gear) gear.classList.toggle('on', page === 'settings');
   const view = $('#view');
   const views = driver
-    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone }
+    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone, 'my-help': driverHelp }
     : {
       home: officeNew, new: officeNew, calls: callHistory,
       dispatch: hubDispatch, today: todayBoard, shifts: shiftsPage, orders: ordersQuery, order: orderDetail,
@@ -504,19 +523,22 @@ async function todayBoard(view, arg) {
   const mode = store.get('boardMode', 'board');
   const lists = await Promise.all([
     data('/api/drivers'), data('/api/shifts?date=' + date), data('/api/orders?delivery_date=' + date),
-    isToday ? data('/api/orders?open_until=' + t) : [], isToday ? data('/api/orders?status=dispatched') : []]);
+    isToday ? data('/api/orders?open_until=' + t) : [], isToday ? data('/api/orders?status=dispatched') : [], pushStatus()]);
   const [drivers, shifts] = lists;
+  const ps = lists[5], remind = ps.remind_minutes;
+  const light = d => lightDot(ps.drivers.find(x => x.id === d));
   const seen = new Set(); const orders = [];
   for (const o of [...lists[2], ...lists[3], ...lists[4]]) if (!seen.has(o.id) && o.status !== 'cancelled') { seen.add(o.id); orders.push(o); }
   const st = { orders, shifts: shifts.map(x => x.driver_id + ':' + x.slot) };
   const onShift = (d, s) => st.shifts.includes(d + ':' + s);
   const late = o => o.delivery_date && o.delivery_date < date ? `<span class="pill bad">逾期 ${esc(o.delivery_date.slice(5).replace('-', '/'))}</span>` : '';
-  const card = o => `<div class="tcard ${o.status}${o._pending ? ' pending' : ''}" draggable="${o.status === 'delivered' ? 'false' : 'true'}" data-o="${o.id}">
+  const card = o => `<div class="tcard ${o.status}${o._pending ? ' pending' : ''}${unseenLate(o, remind) ? ' unseen' : ''}" draggable="${o.status === 'delivered' ? 'false' : 'true'}" data-o="${o.id}">
       <div class="row between" style="flex-wrap:nowrap"><b class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(o.address)}</b><span class="money">${money(o.total_amount)}</span></div>
       <div>${esc(o.summary || '')}</div>
       <div class="row" style="gap:4px"><span class="muted grow">${esc(o.customer_name)}</span>${late(o)}
         ${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : ''}
-        ${o.status === 'delivered' ? '<span class="pill ok">✓ 已送</span>' : ''}</div>
+        ${o.status === 'delivered' ? '<span class="pill ok">✓ 已送</span>' : seenPill(o, remind)}</div>
+      ${unseenLate(o, remind) ? `<div class="row" style="margin-top:4px"><button class="ghost" data-line="${o.id}">傳 LINE 補送</button></div>` : ''}
       ${o.note ? `<div class="muted" style="font-size:13px">📝 ${esc(o.note)}</div>` : ''}
       ${o.status === 'new' ? `<select class="pick" data-pick="${o.id}"><option value="">派給…</option>${drivers.map(d => `<option value="${d.id}">${esc(d.name)}${onShift(d.id, o.delivery_slot || 'am') || onShift(d.id, 'pm') || onShift(d.id, 'eve') ? '' : '（沒排班）'}</option>`).join('')}</select>` : ''}
     </div>`;
@@ -528,14 +550,14 @@ async function todayBoard(view, arg) {
     const sum = l => ({ n: l.length, qty: l.reduce((s, o) => s + (o.gas_qty || 0), 0), amt: l.reduce((s, o) => s + o.total_amount, 0), paid: l.reduce((s, o) => s + (o.paid_amount || 0), 0) });
     const right = mode === 'table'
       ? `<div class="card table-wrap"><table class="ttable"><tr><th>單號</th><th>時段</th><th>客戶</th><th>電話</th><th>地址</th><th>品項</th><th class="num">瓦斯</th><th class="num">金額</th><th class="num">實收</th><th>狀態</th><th>備註</th></tr>
-        ${work.filter(w => w.list.length || w.on.length).map(w => { const x = sum(w.list); return `<tr class="drv"><td colspan="11"><b>${esc(w.d.name)}</b> <span class="muted">${w.on.length ? w.on.map(slotText).join('、') + '有班' : '沒排班'}・${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></td></tr>
+        ${work.filter(w => w.list.length || w.on.length).map(w => { const x = sum(w.list); return `<tr class="drv"><td colspan="11">${light(w.d.id)}<b>${esc(w.d.name)}</b> <span class="muted">${w.on.length ? w.on.map(slotText).join('、') + '有班' : '沒排班'}・${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></td></tr>
           ${w.list.map(o => `<tr class="click" data-open="${o.id}"><td>${esc(o.order_no)}</td><td>${slotText(o.delivery_slot)}</td><td>${esc(o.customer_name)}</td><td>${esc(o.phone || '')}</td><td>${esc(o.address)}</td><td>${esc(o.summary || '')}</td>
-            <td class="num">${o.gas_qty || ''}</td><td class="num">${money(o.total_amount)}</td><td class="num">${o.status === 'delivered' ? money(o.paid_amount) : ''}</td><td>${STATUS[o.status]}</td><td class="muted">${esc(o.note || '')}</td></tr>`).join('') || '<tr><td colspan="11" class="muted">沒有單</td></tr>'}
+            <td class="num">${o.gas_qty || ''}</td><td class="num">${money(o.total_amount)}</td><td class="num">${o.status === 'delivered' ? money(o.paid_amount) : ''}</td><td>${STATUS[o.status]} ${seenPill(o, remind)}</td><td class="muted">${esc(o.note || '')}</td></tr>`).join('') || '<tr><td colspan="11" class="muted">沒有單</td></tr>'}
           <tr class="sub"><td colspan="6">小計 ${x.n} 單</td><td class="num">${x.qty}</td><td class="num">${money(x.amt)}</td><td class="num">${money(x.paid)}</td><td colspan="2"></td></tr>`; }).join('')}
         ${pend.length ? `<tr class="drv"><td colspan="11"><b>還沒派</b> <span class="muted">${pend.length} 單</span></td></tr>` : ''}
         ${(() => { const x = sum(st.orders); return `<tr class="total"><td colspan="6">全日合計 ${x.n} 單</td><td class="num">${x.qty}</td><td class="num">${money(x.amt)}</td><td class="num">${money(x.paid)}</td><td colspan="2"></td></tr>`; })()}</table></div>`
       : `<div class="lanes">${work.map(w => `<section class="lane${w.on.length ? '' : ' off'}">
-          <div class="lane-head"><b>${esc(w.d.name)}</b><span class="muted">${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></div>
+          <div class="lane-head"><span>${light(w.d.id)}<b>${esc(w.d.name)}</b></span><span class="muted">${w.list.filter(o => o.status === 'delivered').length}/${w.list.length} 完成</span></div>
           <div class="shiftchips">${SLOTS.map(s => `<button class="chip${onShift(w.d.id, s) ? ' on' : ''}" data-shift="${w.d.id}" data-slot="${s}">${SLOT[s]}${onShift(w.d.id, s) ? '有班' : ''}</button>`).join('')}</div>
           ${[...SLOTS, ''].map(s => { const l = w.list.filter(o => (o.delivery_slot || '') === s); if (s === '' && !l.length) return '';
             return `<div class="slot-h">${slotText(s)} <span class="muted">${l.length}</span></div><div class="drop" data-drop="${w.d.id}" data-slot="${s}">${l.map(card).join('') || '<div class="muted hint">把單拖到這裡</div>'}</div>`; }).join('')}
@@ -589,6 +611,7 @@ async function todayBoard(view, arg) {
       draw(); return;
     }
     if (e.target.closest('select')) return;
+    const ln = e.target.closest('[data-line]'); if (ln) { const o = st.orders.find(x => x.id === +ln.dataset.line); if (o) sendLine(o); return; }
     const c = e.target.closest('[data-o],[data-open]'); if (c) location.hash = '#/order/' + (c.dataset.o || c.dataset.open);
   };
 }
@@ -756,6 +779,7 @@ async function orderDetail(view, id) {
     <div class="card"><div class="row between"><h2 style="margin:0">${esc(o.order_no)}　${esc(o.customer_name)}</h2>
       <span class="pill ${o.status === 'delivered' ? 'ok' : o.status === 'cancelled' ? 'bad' : 'accent'}">${STATUS[o.status]}</span></div>
       <p>配送 <b>${dayText(o.delivery_date)} ${slotText(o.delivery_slot)}</b>${editable ? ' <button class="ghost" id="resched">改日期／時段</button>' : ''}</p>
+      ${o.status === 'dispatched' ? `<p>${esc(o.driver_name || '')}　派單 ${hhmm(o.dispatched_at)}　${o.seen_at ? `<span class="pill ok">✓ 師傅 ${hhmm(o.seen_at)} 看到</span>` : '<span class="pill bad">師傅還沒看</span>'}${o.reminded_at && !o.seen_at ? `　<span class="muted">${hhmm(o.reminded_at)} 已再響一次</span>` : ''}</p>` : ''}
       <p>${esc(o.address)}　${esc(o.phone || '')}　${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : '現結・' + (o.pay_method === 'transfer' ? '<span class="pill blue">轉帳</span>' : '現金')}
       ${o.needs_invoice ? `<span class="pill">開發票 ${esc(o.tax_id || '')}</span>` : ''}</p>
       <div class="table-wrap"><table><tr><th>商品</th><th class="num">數量</th><th class="num">單價</th><th class="num">折扣</th><th class="num">金額</th><th class="num">回收空瓶</th></tr>
@@ -1449,8 +1473,17 @@ async function reconcile(view) {
 async function settings(view) {
   const [sys, users, cfg] = await Promise.all([api('GET', '/api/system'), S.me.role === 'admin' ? api('GET', '/api/users') : [], api('GET', '/api/settings')]);
   const admin = S.me.role === 'admin';
-  const [callCard, legacyCard] = await Promise.all([callSettingsCard(), legacySettingsCard()]);
-  view.innerHTML = `<h2>⚙️ 設定</h2>${callCard}${legacyCard}
+  const [callCard, legacyCard, ps] = await Promise.all([callSettingsCard(), legacySettingsCard(), api('GET', '/api/push/status').catch(() => ({ drivers: [], remind_minutes: 3 }))]);
+  const PHONE = { iphone: 'iPhone', samsung: '三星', android: '安卓', other: '其他' };
+  const notifyCard = `<div class="card" id="notify"><h3 style="margin-top:0">📣 派單通知</h3>
+      <p class="muted">綠燈＝手機最近有收到通知；黃燈＝有開通知但很久沒確認，按「送測試」確認一次；紅燈＝沒開通知或送不到，請師傅在手機上按「收不到？看教學」照著設定。</p>
+      <table><tr><th>師傅</th><th>狀態</th><th>手機</th><th>最後收到</th><th></th></tr>
+      ${ps.drivers.map(d => `<tr><td>${lightDot(d)}${esc(d.name)}</td><td>${esc(LIGHT[d.status])}${d.last_error ? `<div class="muted" style="font-size:13px">${esc(d.last_error)}</div>` : ''}</td>
+        <td>${d.phones ? (d.platforms || '').split(',').map(k => PHONE[k] || k).join('、') + (d.phones > 1 ? `（${d.phones} 支）` : '') : '—'}</td>
+        <td>${esc(d.last_ack_at || '還沒有')}</td><td><button class="ghost" data-ptest="${d.id}" ${d.phones ? '' : 'disabled'}>送測試</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">還沒有師傅帳號</td></tr>'}</table>
+      ${admin ? `<label>派單幾分鐘師傅還沒看，就在電腦上變紅色、手機再響一次（0 = 不提醒）</label>
+      <p class="row"><input id="remindMin" type="number" min="0" max="120" value="${ps.remind_minutes}" style="width:100px"> 分鐘 <button id="saveRemind">儲存</button></p>` : ''}</div>`;
+  view.innerHTML = `<h2>⚙️ 設定</h2>${notifyCard}${callCard}${legacyCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -1480,7 +1513,17 @@ async function settings(view) {
   bindCallSettings(view);
   bindLegacySettings(view);
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
+  $('#notify').onclick = async e => {
+    const b = e.target.closest('[data-ptest]'); if (!b) return;
+    try { await api('POST', '/api/push/test', { driver_id: +b.dataset.ptest }); toast('已送出測試，手機收到後這裡會變綠燈（約幾秒）', 'ok'); setTimeout(() => location.hash.startsWith('#/settings') && settings(view), 8000); }
+    catch (err) { toast(err.message, 'bad'); }
+  };
   if (!admin) return;
+  $('#saveRemind').onclick = async () => {
+    const v = Math.max(0, Math.min(120, parseInt($('#remindMin').value, 10) || 0));
+    await api('PUT', '/api/settings', { remind_minutes: String(v) }); store.del('c:/api/push/status');
+    toast(v ? `已儲存：派單 ${v} 分鐘沒看就提醒` : '已關閉沒看提醒', 'ok');
+  };
   $('#autoUpd').onchange = async e => { await api('PUT', '/api/settings', { auto_update: e.target.checked ? 'on' : 'off' }); toast(e.target.checked ? '已開啟半夜自動更新' : '已關閉半夜自動更新', 'ok'); };
   $('#updCheck').onclick = async () => {
     $('#updInfo').textContent = '檢查中…';
@@ -1591,10 +1634,8 @@ function localDone() { return store.get('localDone', {}); }
 
 async function driverJobs(view) {
   const list = (await data('/api/orders?status=dispatched')).filter(o => !localDone()[o.id]);
-  const pushOK = window.Notification && Notification.permission === 'granted';
   view.innerHTML = `
-    ${!pushOK && 'PushManager' in window ? '<div class="card row between"><span>開啟通知，派單時手機會響</span><button class="primary" id="push">開啟通知</button></div>' : ''}
-    ${!('PushManager' in window) && /iPhone|iPad/.test(navigator.userAgent) ? '<div class="card muted">iPhone 要先按 Safari 下方「分享」→「加入主畫面」，從主畫面打開才能收到通知。</div>' : ''}
+    ${notifyCardHTML()}
     <h2>我的單 <span class="pill accent">${list.length}</span></h2>
     ${list.map(o => `<div class="job">
       <div class="row between"><span class="name">${esc(o.customer_name)}</span><span class="big">${o.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : money(o.total_amount) + (o.pay_method === 'transfer' ? ' <span class="pill blue">轉帳</span>' : '')}</span></div>
@@ -1607,7 +1648,9 @@ async function driverJobs(view) {
   view.onclick = e => {
     const b = e.target.closest('[data-go]'); if (b) location.hash = '#/my/' + b.dataset.go;
     if (e.target.id === 'push') enablePush();
+    if (e.target.id === 'pushTest') testPush();
   };
+  markSeen(list);
 }
 
 async function driverDeliver(view, id) {
@@ -1622,6 +1665,7 @@ async function driverDeliver(view, id) {
     o = { ...l, items: [] }; // 離線時沒有明細，空瓶數之後可在店裡補
   }
   if (o.status !== 'dispatched') { view.innerHTML = `<div class="card">這張單目前是「${STATUS[o.status]}」。<a href="#/my">回我的單</a></div>`; return; }
+  markSeen([o]);
   view.innerHTML = `<p><a href="#/my">← 回我的單</a></p><div class="job"><div class="name">${esc(o.customer_name)}</div><div class="addr">${esc(o.address)}</div>
     <div>${(o.items || []).map(i => `${esc(i.product_name)} × ${i.qty}`).join('、') || esc(o.summary || '')}</div>
     <div class="big" style="margin-top:6px">應收 ${o.billing_type === 'monthly' ? '0（月結）' : money(o.total_amount) + (o.pay_method === 'transfer' ? '（轉帳）' : '')}</div></div>
@@ -1659,16 +1703,116 @@ async function driverDone(view) {
 
 // 推播通知
 function b64ToBytes(s) { const p = '='.repeat((4 - s.length % 4) % 4); const b = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+// 哪種手機（存到店裡，電腦上看得到；教學也照這個顯示）
+function phoneKind() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'iphone';
+  if (/SM-|SAMSUNG|Samsung/.test(ua)) return 'samsung';
+  if (/Android/.test(ua)) return 'android';
+  return 'other';
+}
+async function phoneKindExact() {
+  const k = phoneKind();
+  if (k !== 'android' || !navigator.userAgentData || !navigator.userAgentData.getHighEntropyValues) return k;
+  try { const v = await navigator.userAgentData.getHighEntropyValues(['model']); return /^SM-|Galaxy/i.test(v.model || '') ? 'samsung' : k; } catch { return k; }
+}
+function iosOld() { const m = /OS (\d+)_(\d+)/.exec(navigator.userAgent); return m ? (+m[1] < 16 || (+m[1] === 16 && +m[2] < 4)) : false; }
+const standalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+// 我的單最上面：通知現在的狀況，有問題就變紅色
+function notifyCardHTML() {
+  const kind = phoneKind();
+  const help = '<a class="btn" href="#/my-help">收不到？看教學</a>';
+  const off = (msg, btn = '') => `<div class="card notify-card off"><div><b>🔕 ${msg}</b></div><p class="row" style="margin:8px 0 0">${btn}${help}</p></div>`;
+  if (kind === 'iphone' && iosOld()) return off('iPhone 系統太舊（要 iOS 16.4 以上），收不到派單通知。請到「設定 → 一般 → 軟體更新」更新。');
+  if (kind === 'iphone' && !standalone()) return off('iPhone 要先「加入主畫面」，從主畫面的圖示打開，才收得到派單通知。');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !window.Notification) return off('這個瀏覽器收不到通知。三星／安卓請用 Chrome 打開，iPhone 請從主畫面打開。');
+  if (Notification.permission === 'denied') return off('通知被封鎖了，派單時手機不會響。照教學把通知打開。');
+  if (Notification.permission !== 'granted') return off('還沒開通知，派單時手機不會響。', '<button class="primary" id="push">開啟通知</button>');
+  return `<div class="card notify-card row between"><span>🔔 通知已開啟</span><span class="row"><button id="pushTest">測試通知</button>${help}</span></div>`;
+}
+
+let pushSynced = false;
+async function savePush(reg) {
+  const { public_key } = await api('GET', '/api/push/key');
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(public_key) });
+  await api('POST', '/api/push/subscribe', { ...sub.toJSON(), platform: await phoneKindExact() });
+}
+// 已經允許通知：每次打開都跟店裡對一次，換手機或清過資料也能自動接回來
+async function syncPush() {
+  if (pushSynced || !window.Notification || Notification.permission !== 'granted' || !('serviceWorker' in navigator)) return;
+  pushSynced = true;
+  try { await savePush(await navigator.serviceWorker.ready); } catch { pushSynced = false; }
+}
 async function enablePush() {
   try {
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') return toast('沒有允許通知，派單時手機不會響', 'bad');
-    const reg = await navigator.serviceWorker.ready;
-    const { public_key } = await api('GET', '/api/push/key');
-    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(public_key) });
-    await api('POST', '/api/push/subscribe', sub.toJSON());
-    toast('通知已開啟 🔔', 'ok'); route();
+    if (perm !== 'granted') { toast('沒有允許通知，派單時手機不會響。請按「收不到？看教學」', 'bad'); return route(); }
+    await savePush(await navigator.serviceWorker.ready);
+    pushSynced = true;
+    toast('通知已開啟 🔔 馬上送一則測試給你', 'ok'); route();
+    setTimeout(testPush, 800);
   } catch (e) { toast('開啟通知失敗：' + e.message, 'bad'); }
+}
+async function testPush() {
+  try {
+    await syncPush();
+    await api('POST', '/api/push/test', {});
+    toast('已送出測試，幾秒內手機會響。沒響請按「收不到？看教學」', 'ok');
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+// 師傅看到哪些單（畫面在前面才算）
+const seenSent = new Set();
+function markSeen(list) {
+  if (document.hidden) return;
+  const ids = list.filter(o => o.status === 'dispatched' && !o.seen_at && !seenSent.has(o.id)).map(o => o.id);
+  if (!ids.length) return;
+  ids.forEach(i => seenSent.add(i));
+  api('POST', '/api/orders/seen', { ids }).catch(() => ids.forEach(i => seenSent.delete(i)));
+}
+
+// 通知收不到的教學：依手機種類顯示
+function driverHelp(view) {
+  const kind = phoneKind();
+  const url = location.origin;
+  const iphone = `<h3>🍎 iPhone</h3>
+    ${iosOld() ? '<div class="help-warn">你的 iOS 太舊，要先更新到 16.4 以上：設定 → 一般 → 軟體更新。</div>' : ''}
+    <ol class="help-steps">
+      <li>用 <b>Safari</b> 打開 <b>${esc(url)}</b>（不要用 LINE 裡面的瀏覽器）。</li>
+      <li>按下方中間的 <b>分享</b>（方框加箭頭）→ 往下滑 → <b>加入主畫面</b> → 右上角 <b>加入</b>。</li>
+      <li>回到桌面，點 <b>瓦斯行</b> 圖示打開，登入。${kind === 'iphone' ? (standalone() ? '<br><span class="pill ok">✓ 你現在就是從主畫面打開的</span>' : '<br><span class="pill bad">你現在不是從主畫面打開的</span>') : ''}</li>
+      <li>在「我的單」按 <b>開啟通知</b> → 跳出來的視窗按 <b>允許</b>。</li>
+      <li>到 iPhone <b>設定 → 通知 → 瓦斯行</b>：打開 <b>允許通知</b>，「鎖定畫面、通知中心、橫幅」都勾，<b>橫幅樣式</b>選 <b>持續</b>，<b>聲音</b>打開。</li>
+      <li><b>專注模式很重要</b>：iPhone 開車時常會自動開「駕駛」專注模式，會把通知擋掉。到 <b>設定 → 專注模式</b>，把「駕駛」「勿擾模式」「工作」每一個都點進去 → <b>允許的通知 → App → 加入「瓦斯行」</b>。</li>
+      <li>手機側邊的 <b>靜音鍵</b>打開時，通知會跳但不會響，送貨時請關掉靜音。</li>
+      <li>回到「我的單」按 <b>測試通知</b>，手機有跳就完成了。</li>
+    </ol>`;
+  const android = `<h3>📱 三星／安卓手機</h3>
+    <p class="muted">下面是三星的選單名稱，其他牌子的手機名稱類似。</p>
+    <ol class="help-steps">
+      <li>用 <b>Chrome</b> 打開 <b>${esc(url)}</b>（不要用「三星網際網路」或 LINE 裡面的瀏覽器）。</li>
+      <li>按右上角 <b>⋮</b> → <b>加到主畫面</b>（或「安裝應用程式」）→ <b>安裝</b>。之後都從桌面的 <b>瓦斯行</b> 圖示打開。</li>
+      <li>在「我的單」按 <b>開啟通知</b> → 按 <b>允許</b>。</li>
+      <li><b>關掉省電，最重要</b>：手機 <b>設定 → 應用程式 → Chrome → 電池</b>，選 <b>不受限制</b>。如果應用程式清單裡也有 <b>瓦斯行</b>，它也要改成不受限制。</li>
+      <li><b>設定 → 電池 → 背景使用限制</b>：把「<b>讓未使用的應用程式進入睡眠</b>」關掉；再點「<b>睡眠中的應用程式</b>」和「<b>深度睡眠中的應用程式</b>」，如果看到 Chrome 或瓦斯行，把它移除。</li>
+      <li><b>設定 → 應用程式 → Chrome → 通知</b>：打開 <b>允許通知</b>；在網站的通知類別裡找到這個網址，打開並選 <b>提醒</b>（有聲音、會跳出來）。</li>
+      <li>如果有開 <b>勿擾模式</b>：設定 → 通知 → 勿擾 → <b>應用程式例外</b> → 加入 Chrome（和瓦斯行）。</li>
+      <li>回到「我的單」按 <b>測試通知</b>，手機有跳就完成了。</li>
+    </ol>`;
+  const blocked = window.Notification && Notification.permission === 'denied'
+    ? `<div class="help-warn">這支手機把通知封鎖了：${kind === 'iphone' ? '到 設定 → 通知 → 瓦斯行，打開允許通知。' : '在 Chrome 網址列左邊的圖示 → 權限 → 通知 → 允許；或 設定 → 應用程式 → Chrome → 通知 打開。'}改好後回來重新整理。</div>` : '';
+  view.innerHTML = `<p><a href="#/my">← 回我的單</a></p>
+    <div class="card"><h2 style="margin-top:0">通知收不到怎麼辦</h2>
+      <p>照下面一步一步做，最後按「測試通知」確認會響。店裡電腦也看得到你的手機有沒有收到。</p>${blocked}
+      ${kind === 'iphone' ? iphone : android}
+      <p class="row"><button class="primary" id="pushTest">測試通知</button>${window.Notification && Notification.permission === 'default' ? '<button id="push">開啟通知</button>' : ''}</p>
+      <details><summary>看另一種手機的教學</summary>${kind === 'iphone' ? android : iphone}</details></div>`;
+  view.onclick = e => {
+    if (e.target.id === 'push') enablePush();
+    if (e.target.id === 'pushTest') testPush();
+  };
 }
 
 // 電腦版快捷鍵：F2 記單

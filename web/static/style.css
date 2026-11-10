@@ -255,3 +255,16 @@ svg.bars .bar:hover path { fill:var(--accent); }
 svg.bars .bar:hover .hit { fill:var(--bg); }
 svg.bars text { fill:var(--muted); font-size:11px; text-anchor:middle; }
 svg.bars text.val { fill:var(--text); font-size:11px; }
+
+/* 派單通知：已讀／沒看到提醒／每位師傅的通知燈號 */
+.tcard.unseen { border:2px solid var(--bad); border-left:6px solid var(--bad); background:var(--bad-soft); animation:unseen 1.2s ease-in-out infinite alternate; }
+@keyframes unseen { from { box-shadow:0 0 0 0 transparent; } to { box-shadow:0 0 0 4px var(--bad-soft); } }
+@media (prefers-reduced-motion: reduce) { .tcard.unseen { animation:none; } }
+.dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--muted); }
+.dot.ok { background:var(--ok); } .dot.stale { background:#e0a100; } .dot.bad { background:var(--bad); }
+.notify-card { border-left:4px solid var(--ok); }
+.notify-card.off { border-left-color:var(--bad); background:var(--bad-soft); }
+.help-steps { padding-left:22px; line-height:1.7; }
+.help-steps li { margin-bottom:10px; }
+.help-steps b { color:var(--accent); }
+.help-warn { background:var(--bad-soft); color:var(--bad); border-radius:8px; padding:8px 12px; font-weight:600; margin:8px 0; }

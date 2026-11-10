@@ -68,6 +68,7 @@ func main() {
 	a.ShowWindow = ui.Show
 	a.OpenURL = openBrowser
 	go a.Backup.Run(ctx)
+	go a.RunReminders(ctx)
 	if !*noTunnel {
 		a.Tunnel = &app.Tunnel{Port: *port, Dir: baseDir, Download: true}
 		a.Tunnel.Config = a.TunnelConfig

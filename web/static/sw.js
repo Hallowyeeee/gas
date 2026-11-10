@@ -23,14 +23,25 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data.json(); } catch { d = { title: '新派單', body: e.data ? e.data.text() : '' }; }
-  e.waitUntil(self.registration.showNotification(d.title || '新派單', {
-    body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', tag: d.url || 'gas', renotify: true,
-    vibrate: [300, 100, 300], data: { url: d.url || '/#/my' },
-  }));
+  const job = /派單/.test(d.title || '新派單');
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(d.title || '新派單', {
+      body: d.body || '', icon: '/icon-192.png', badge: '/icon-192.png', tag: d.url || 'gas', renotify: true,
+      requireInteraction: job, // 派單通知一直留在螢幕上，等師傅點掉
+      vibrate: [400, 150, 400, 150, 400], data: { url: d.url || '/#/my' },
+    }),
+    // 回報店裡「這支手機有收到」，電腦上的通知燈號才會亮綠燈
+    self.registration.pushManager.getSubscription().then(sub => sub && fetch('/api/push/ack', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }),
+    })).catch(() => { }),
+  ]));
 });
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const url = e.notification.data && e.notification.data.url || '/#/my';
+  // 點開派單通知 = 師傅看到了
+  const m = /#\/my\/(\d+)/.exec(url);
+  if (m) fetch('/api/orders/seen', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [+m[1]] }) }).catch(() => { });
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
     for (const c of list) { if ('focus' in c) { c.navigate(url); return c.focus(); } }
     return clients.openWindow(url);

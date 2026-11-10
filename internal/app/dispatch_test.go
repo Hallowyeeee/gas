@@ -256,7 +256,7 @@ func TestUpgradeDispatchV5(t *testing.T) {
 	var ver int
 	db.QueryRow(`SELECT delivery_date FROM orders WHERE order_no = 'A1'`).Scan(&dd)
 	db.QueryRow(`SELECT version FROM schema_version`).Scan(&ver)
-	if dd != "2026-10-01" || ver != 5 {
+	if dd != "2026-10-01" || ver != len(upgrades) {
 		t.Fatal("升級第 5 版", dd, ver)
 	}
 }
