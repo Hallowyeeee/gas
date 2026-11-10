@@ -315,6 +315,8 @@ func (a *App) report(r *http.Request, u *User) (any, error) {
 	case "unpaid-orders":
 		return rows(ctx, a.DB, `SELECT v.*, c.name AS customer_name FROM v_order_payment v JOIN customers c ON c.id = v.customer_id
 			WHERE v.status = 'delivered' AND v.billing_type = 'cash' AND v.unpaid_amount <> 0 ORDER BY v.delivered_date DESC`)
+	case "dashboard":
+		return a.dashboard(ctx, q.Get("period"))
 	case "audit":
 		if u.Role != "admin" {
 			return nil, forbidden()

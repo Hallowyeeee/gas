@@ -15,6 +15,9 @@ import (
 
 const sessionCookie = "gas_session"
 
+// sessionDays 登入可以維持幾天；有在用會自動延長
+const sessionDays = 60
+
 // User 是目前登入的人。
 type User struct {
 	ID    int64  `json:"id"`
@@ -78,6 +81,7 @@ func (a *App) route(h handlerFunc, roles ...string) http.HandlerFunc {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "請先登入"})
 			return
 		}
+		a.renewSession(w, r)
 		if len(roles) > 0 {
 			ok := false
 			for _, role := range roles {
@@ -203,17 +207,43 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) (any, error) {
 
 func (a *App) startSession(w http.ResponseWriter, r *http.Request, u *User) (any, error) {
 	token := newToken()
-	expires := time.Now().AddDate(0, 0, 60)
+	expires := time.Now().AddDate(0, 0, sessionDays)
 	if _, err := a.DB.ExecContext(r.Context(), `INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`,
 		token, u.ID, expires.Format("2006-01-02 15:04:05")); err != nil {
 		return nil, err
 	}
 	a.DB.ExecContext(r.Context(), `DELETE FROM sessions WHERE expires_at < datetime('now','localtime')`)
+	setSessionCookie(w, r, token, expires)
+	return map[string]any{"user": u, "token": token}, nil
+}
+
+// renewSession 有在用就自動延長登入：剩不到 50 天就延回 60 天，只要 60 天內打開過一次就不用重新登入。
+func (a *App) renewSession(w http.ResponseWriter, r *http.Request) {
+	token, fromCookie := "", false
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		token, fromCookie = c.Value, true
+	} else if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		token = strings.TrimPrefix(h, "Bearer ")
+	}
+	if token == "" {
+		return
+	}
+	expires := time.Now().AddDate(0, 0, sessionDays)
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE sessions SET expires_at = ? WHERE token = ? AND expires_at < datetime('now','localtime','+50 days')`,
+		expires.Format("2006-01-02 15:04:05"), token)
+	if err != nil {
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 && fromCookie {
+		setSessionCookie(w, r, token, expires)
+	}
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
 		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil || r.Header.Get("Cf-Connecting-Ip") != "",
 	})
-	return map[string]any{"user": u, "token": token}, nil
 }
 
 func (a *App) handleLogout(r *http.Request, u *User) (any, error) {

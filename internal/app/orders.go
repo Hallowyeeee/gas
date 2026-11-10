@@ -27,6 +27,32 @@ type orderIn struct {
 	InvoiceNo    *string  `json:"invoice_no"`
 	BillingType  *string  `json:"billing_type"`
 	PayMethod    *string  `json:"pay_method"` // 現金 cash／轉帳 transfer
+	DeliveryDate *string  `json:"delivery_date"` // 預約哪天送（YYYY-MM-DD，空白＝今天）
+	DeliverySlot *string  `json:"delivery_slot"` // am 上午／pm 下午／eve 晚上／空白＝不指定
+	CallID       *int64   `json:"call_id"`       // 從哪一通來電記的單（標記來電已處理）
+}
+
+// deliveryDate 檢查預約日期；空白回傳 nil（資料庫會填下單當天）。
+func deliveryDate(p *string) (any, error) {
+	if p == nil || *p == "" {
+		return nil, nil
+	}
+	if _, err := time.Parse("2006-01-02", *p); err != nil {
+		return nil, bad("配送日期格式錯誤")
+	}
+	return *p, nil
+}
+
+// deliverySlot 空白＝不指定（NULL）。
+func deliverySlot(p *string) (any, error) {
+	if p == nil || *p == "" {
+		return nil, nil
+	}
+	switch *p {
+	case "am", "pm", "eve":
+		return *p, nil
+	}
+	return nil, bad("時段只能是上午、下午、晚上或不指定")
 }
 
 func payMethod(p *string) (string, error) {
@@ -125,16 +151,30 @@ func (a *App) createOrder(r *http.Request, u *User) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	dd, err := deliveryDate(in.DeliveryDate)
+	if err != nil {
+		return nil, err
+	}
+	slot, err := deliverySlot(in.DeliverySlot)
+	if err != nil {
+		return nil, err
+	}
 	no, err := a.nextOrderNo(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO orders (order_no, customer_id, billing_type, address, phone, needs_invoice, tax_id, note, pay_method, created_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, no, in.CustomerID, billing, addr, phone, needsInv, taxID, in.Note, pay, u.ID)
+	res, err := tx.ExecContext(ctx, `INSERT INTO orders (order_no, customer_id, billing_type, address, phone, needs_invoice, tax_id, note, pay_method, delivery_date, delivery_slot, created_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, no, in.CustomerID, billing, addr, phone, needsInv, taxID, in.Note, pay, dd, slot, u.ID)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
+	if in.CallID != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE call_logs SET order_id = ?, handled_at = datetime('now','localtime'),
+			customer_id = COALESCE(customer_id, ?) WHERE id = ?`, id, in.CustomerID, *in.CallID); err != nil {
+			return nil, err
+		}
+	}
 	if err := a.insertItems(ctx, tx, id, in.CustomerID, in.Items); err != nil {
 		return nil, err
 	}
@@ -202,6 +242,8 @@ func (a *App) getOrder(r *http.Request, u *User) (any, error) {
 func (a *App) listOrders(r *http.Request, u *User) (any, error) {
 	q := r.URL.Query()
 	status, driver, date, customer := q.Get("status"), q.Get("driver_id"), q.Get("date"), q.Get("customer_id")
+	// delivery_date：預約那天；from/to：預約日期區間；open_until：到那天為止還沒派的單（含逾期）
+	ddate, from, to, openUntil, debt := q.Get("delivery_date"), q.Get("from"), q.Get("to"), q.Get("open_until"), q.Get("debt")
 	if u.IsDriver() {
 		driver = fmt.Sprint(u.ID)
 		if status == "" {
@@ -210,20 +252,33 @@ func (a *App) listOrders(r *http.Request, u *User) (any, error) {
 		if status != "dispatched" && status != "delivered" {
 			return nil, forbidden()
 		}
+		openUntil, debt = "", ""
+	}
+	if debt != "" && debt != "cash" {
+		return nil, bad("debt 只能是 cash")
 	}
 	return rows(r.Context(), a.DB, `
 		SELECT o.id, o.order_no, o.customer_id, c.name AS customer_name, o.address, o.phone, c.floor, c.has_elevator,
 		       o.status, o.billing_type, o.pay_method, o.driver_id, u.name AS driver_name, o.total_amount, o.note,
-		       o.ordered_at, o.dispatched_at, o.delivered_at,
+		       o.ordered_at, o.dispatched_at, o.delivered_at, o.delivery_date, o.delivery_slot,
 		       COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0) AS paid_amount,
-		       (SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary
+		       (SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary,
+		       (SELECT SUM(oi.qty) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id AND p.category = 'gas') AS gas_qty
 		FROM orders o JOIN customers c ON c.id = o.customer_id LEFT JOIN users u ON u.id = o.driver_id
 		WHERE (? = '' OR o.status = ?)
 		  AND (? = '' OR o.driver_id = ?)
 		  AND (? = '' OR o.customer_id = ?)
 		  AND (? = '' OR date(COALESCE(o.delivered_at, o.ordered_at)) = ?)
-		ORDER BY CASE o.status WHEN 'new' THEN 0 WHEN 'dispatched' THEN 1 ELSE 2 END, o.id DESC
-		LIMIT ?`, status, status, driver, driver, customer, customer, date, date, limitParam(r, 300))
+		  AND (? = '' OR o.delivery_date = ?)
+		  AND (? = '' OR o.delivery_date >= ?)
+		  AND (? = '' OR o.delivery_date <= ?)
+		  AND (? = '' OR (o.status = 'new' AND o.delivery_date <= ?))
+		  AND (? = '' OR (o.status = 'delivered' AND o.billing_type = 'cash'
+		       AND o.total_amount <> COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0)))
+		ORDER BY CASE o.status WHEN 'new' THEN 0 WHEN 'dispatched' THEN 1 ELSE 2 END,
+		         o.delivery_date, CASE o.delivery_slot WHEN 'am' THEN 0 WHEN 'pm' THEN 1 WHEN 'eve' THEN 2 ELSE 3 END, o.id DESC
+		LIMIT ?`, status, status, driver, driver, customer, customer, date, date,
+		ddate, ddate, from, from, to, to, openUntil, openUntil, debt, limitParam(r, 300))
 }
 
 func (a *App) updateOrder(r *http.Request, u *User) (any, error) {
@@ -268,6 +323,23 @@ func (a *App) updateOrder(r *http.Request, u *User) (any, error) {
 			return nil, err
 		}
 		f["pay_method"] = pay
+	}
+	if in.DeliveryDate != nil {
+		dd, err := deliveryDate(in.DeliveryDate)
+		if err != nil {
+			return nil, err
+		}
+		if dd == nil {
+			dd = time.Now().Format("2006-01-02")
+		}
+		f["delivery_date"] = dd
+	}
+	if in.DeliverySlot != nil {
+		slot, err := deliverySlot(in.DeliverySlot)
+		if err != nil {
+			return nil, err
+		}
+		f["delivery_slot"] = slot
 	}
 	if in.BillingType != nil {
 		if status == "delivered" {
@@ -320,7 +392,8 @@ func (a *App) dispatchOrder(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	var in struct {
-		DriverID int64 `json:"driver_id"`
+		DriverID     int64   `json:"driver_id"`
+		DeliverySlot *string `json:"delivery_slot"` // 看板拖到某個時段：順便改時段
 	}
 	if err := readJSON(r, &in); err != nil {
 		return nil, err
@@ -333,6 +406,15 @@ func (a *App) dispatchOrder(r *http.Request, u *User) (any, error) {
 	defer tx.Rollback()
 	if err := dispatchTx(ctx, tx, id, in.DriverID); err != nil {
 		return nil, err
+	}
+	if in.DeliverySlot != nil {
+		slot, err := deliverySlot(in.DeliverySlot)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE orders SET delivery_slot = ? WHERE id = ?`, slot, id); err != nil {
+			return nil, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -429,6 +511,22 @@ func (a *App) deliverOrder(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	return a.loadOrder(ctx, id)
+}
+
+// 收回派單：看板把單拖回「待派」
+func (a *App) undispatchOrder(r *http.Request, u *User) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE orders SET status = 'new', driver_id = NULL, dispatched_at = NULL WHERE id = ? AND status = 'dispatched'`, id)
+	if err != nil {
+		return nil, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, bad("這張單不是已派單，不能收回")
+	}
+	return a.loadOrder(r.Context(), id)
 }
 
 func (a *App) cancelOrder(r *http.Request, u *User) (any, error) {

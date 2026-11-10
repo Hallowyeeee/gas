@@ -91,6 +91,19 @@ func migrate(db *sql.DB) error {
 				return err
 			}
 		}
+		if i == 4 { // 第 5 版：預約日期時段、來電處理、常態備註
+			for _, c := range [][3]string{
+				{"orders", "delivery_date", "TEXT"},
+				{"orders", "delivery_slot", "TEXT CHECK (delivery_slot IS NULL OR delivery_slot IN ('am','pm','eve'))"},
+				{"call_logs", "handled_at", "TEXT"},
+				{"call_logs", "order_id", "INTEGER REFERENCES orders(id)"},
+				{"customers", "order_note", "TEXT"},
+			} {
+				if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
+					return err
+				}
+			}
+		}
 		if _, err := db.Exec(upgrades[i]); err != nil {
 			return fmt.Errorf("資料庫升級到第 %d 版失敗: %w", i+1, err)
 		}
@@ -127,6 +140,7 @@ var upgrades = []string{
 	CREATE INDEX IF NOT EXISTS idx_call_logs_time ON call_logs(received_at);`,
 	2: gasdb.Legacy,
 	3: gasdb.Phones,
+	4: gasdb.Dispatch,
 }
 
 // ---------------------------------------------------------------------

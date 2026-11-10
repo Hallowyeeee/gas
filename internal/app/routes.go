@@ -55,6 +55,10 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("PUT /api/orders/{id}", a.route(a.updateOrder, office...))
 	m.HandleFunc("POST /api/orders/{id}/dispatch", a.route(a.dispatchOrder, office...))
 	m.HandleFunc("POST /api/orders/{id}/deliver", a.route(a.deliverOrder))
+	m.HandleFunc("POST /api/orders/{id}/undispatch", a.route(a.undispatchOrder, office...))
+	m.HandleFunc("GET /api/shifts", a.route(a.listShifts, office...))
+	m.HandleFunc("PUT /api/shifts", a.route(a.setShift, office...))
+	m.HandleFunc("POST /api/shifts/copy", a.route(a.copyShifts, office...))
 	m.HandleFunc("POST /api/orders/{id}/cancel", a.route(a.cancelOrder, office...))
 	m.HandleFunc("POST /api/orders/{id}/undeliver", a.route(a.undeliverOrder, admin))
 
@@ -86,6 +90,8 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/reports/{name}", a.route(a.report, office...))
 
 	m.HandleFunc("GET /api/calls", a.route(a.listCalls, office...))
+	m.HandleFunc("GET /api/calls/history", a.route(a.listCallHistory, office...))
+	m.HandleFunc("POST /api/calls/{id}/handled", a.route(a.handleCall, office...))
 	m.HandleFunc("GET /api/calls/lookup", a.route(a.lookupCaller, office...))
 	m.HandleFunc("POST /api/calls/test", a.route(a.testCall, office...))
 	m.HandleFunc("GET /api/callerid", a.route(a.callerBoxStatus, office...))

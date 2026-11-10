@@ -15,3 +15,8 @@ var Legacy string
 //
 //go:embed phones.sql
 var Phones string
+
+// Dispatch 是第 5 版：預約配送日期／時段、師傅排班、來電處理狀態、訂單常態備註。
+//
+//go:embed dispatch.sql
+var Dispatch string

@@ -114,25 +114,53 @@ func (a *App) checkUpdate(ctx context.Context) (*UpdateInfo, error) {
 }
 
 // CheckUpdateOnStart 開程式 15 秒後自動檢查一次，之後每 6 小時一次。
+// 半夜 2～5 點如果有新版，而且設定沒有關掉「半夜自動更新」，就自動更新（會先備份）。
 func (a *App) CheckUpdateOnStart(ctx context.Context, notify func(string)) {
 	if a.ExePath != "" {
 		go func() { time.Sleep(10 * time.Second); os.Remove(a.ExePath + ".old") }()
 	}
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(15 * time.Second):
+	}
+	var last time.Time
 	for {
+		now := time.Now()
+		night := a.autoUpdateOn() && inNightWindow(now)
+		if now.Sub(last) >= 6*time.Hour || (night && now.Sub(last) >= 25*time.Minute) {
+			last = now
+			info, err := a.checkUpdate(ctx)
+			switch {
+			case err != nil:
+			case info.Available && night:
+				log.Println("半夜自動更新到", info.Latest)
+				if _, err := a.applyUpdate(ctx); err != nil {
+					log.Println("自動更新失敗：", err)
+				}
+			case info.Available && notify != nil:
+				notify("有新版本 " + info.Latest + "，半夜會自動更新；也可以到「設定」按更新")
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(15 * time.Second):
-		}
-		if info, err := a.checkUpdate(ctx); err == nil && info.Available && notify != nil {
-			notify("有新版本 " + info.Latest + "，請到「設定」按更新")
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(6 * time.Hour):
+		case <-time.After(30 * time.Minute):
 		}
 	}
+}
+
+// inNightWindow 半夜 2:00～4:59 才自動更新，不會打擾營業。
+func inNightWindow(t time.Time) bool { return t.Hour() >= 2 && t.Hour() < 5 }
+
+// autoUpdateOn 設定 auto_update = "off" 才關掉；預設開。
+func (a *App) autoUpdateOn() bool {
+	if a.ExePath == "" || a.Restart == nil {
+		return false
+	}
+	var v string
+	a.DB.QueryRow(`SELECT value FROM settings WHERE key = 'auto_update'`).Scan(&v)
+	return v != "off"
 }
 
 func (a *App) updateStatus() *UpdateInfo {
@@ -154,52 +182,60 @@ func (a *App) handleUpdateApply(r *http.Request, u *User) (any, error) {
 	if !isLocal(r) {
 		return nil, &apiError{http.StatusForbidden, "更新只能在店裡的電腦上按"}
 	}
+	v, err := a.applyUpdate(r.Context())
+	if err != nil {
+		return nil, bad(err.Error())
+	}
+	return map[string]any{"ok": true, "version": v}, nil
+}
+
+func (a *App) applyUpdate(ctx context.Context) (string, error) {
 	if a.ExePath == "" || a.Restart == nil {
-		return nil, bad("這個版本不支援自動更新")
+		return "", fmt.Errorf("這個版本不支援自動更新")
 	}
 	a.upd.mu.Lock()
 	if a.upd.applying {
 		a.upd.mu.Unlock()
-		return nil, bad("正在更新中")
+		return "", fmt.Errorf("正在更新中")
 	}
 	a.upd.applying = true
 	a.upd.mu.Unlock()
 	defer func() { a.upd.mu.Lock(); a.upd.applying = false; a.upd.mu.Unlock() }()
 
-	info, err := a.checkUpdate(r.Context())
+	info, err := a.checkUpdate(ctx)
 	if err != nil {
-		return nil, bad("檢查更新失敗：" + err.Error())
+		return "", fmt.Errorf("檢查更新失敗：%w", err)
 	}
 	if !info.Available {
-		return nil, bad("已經是最新版")
+		return "", fmt.Errorf("已經是最新版")
 	}
 	if a.Backup != nil {
 		if _, err := a.Backup.Now(); err != nil {
-			return nil, bad("更新前備份失敗，先不更新：" + err.Error())
+			return "", fmt.Errorf("更新前備份失敗，先不更新：%w", err)
 		}
 	}
 	newPath := a.ExePath + ".new"
 	os.Remove(newPath)
 	if err := download(info.downloadURL, newPath); err != nil {
-		return nil, bad("下載新版失敗：" + shortErr(err))
+		return "", fmt.Errorf("下載新版失敗：%s", shortErr(err))
 	}
 	if err := checkExe(newPath); err != nil {
 		os.Remove(newPath)
-		return nil, bad(err.Error())
+		return "", err
 	}
 	oldPath := a.ExePath + ".old"
 	os.Remove(oldPath)
 	if err := os.Rename(a.ExePath, oldPath); err != nil {
 		os.Remove(newPath)
-		return nil, bad("換新版失敗：" + err.Error())
+		return "", fmt.Errorf("換新版失敗：%w", err)
 	}
 	if err := os.Rename(newPath, a.ExePath); err != nil {
 		os.Rename(oldPath, a.ExePath) // 換回舊的
-		return nil, bad("換新版失敗：" + err.Error())
+		return "", fmt.Errorf("換新版失敗：%w", err)
 	}
 	log.Println("已下載新版", info.Latest, "，重新啟動")
 	go func() { time.Sleep(800 * time.Millisecond); a.Restart() }()
-	return map[string]any{"ok": true, "version": info.Latest}, nil
+	return info.Latest, nil
 }
 
 // checkExe 確認下載的是完整的 Windows 程式。

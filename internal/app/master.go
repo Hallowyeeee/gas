@@ -13,7 +13,7 @@ import (
 // ---------------------------------------------------------------------
 
 var customerFields = []string{"code", "name", "phone", "phone2", "address", "area", "billing_type",
-	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "active"}
+	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "order_note", "active"}
 
 func limitParam(r *http.Request, def int) int {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 1000 {
@@ -60,6 +60,9 @@ func (a *App) getCustomer(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	if c["legacy"], err = a.customerLegacy(ctx, id); err != nil {
+		return nil, err
+	}
+	if c["favorites"], err = a.customerFavorites(r, id); err != nil {
 		return nil, err
 	}
 	return c, nil
