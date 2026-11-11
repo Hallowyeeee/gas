@@ -1073,7 +1073,7 @@ async function officeNew(view) {
 // ---------------------------------------------------------------------
 // 從舊系統抓資料：瀏覽器按 F12 → 這裡跳出確認視窗 → Enter 存、Esc 不存
 // ---------------------------------------------------------------------
-const LEGACY_FIELDS = [['name', '名字 *'], ['phone', '電話'], ['phone2', '電話 2'], ['address', '地址 *'], ['area', '區域'], ['tax_id', '統一編號']];
+const LEGACY_FIELDS = [['name', '名字 *'], ['phone', '電話'], ['phone2', '電話 2'], ['address', '地址'], ['area', '區域'], ['tax_id', '統一編號']];
 S.capQueue = [];
 function capDialog() {
   let d = $('#capdlg');

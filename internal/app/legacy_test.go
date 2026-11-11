@@ -161,3 +161,22 @@ func TestTypicalInterval(t *testing.T) {
 }
 
 func itoa(v int64) string { return strconv.FormatInt(v, 10) }
+
+// 舊系統本來就沒有地址：照樣存得進去
+func TestLegacySaveWithoutAddress(t *testing.T) {
+	_, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	page, _ := os.ReadFile("testdata/easy88_order_form.html")
+	src := strings.Replace(string(page), "中壢區測試路1號※複合桶，範例街2號(送一般)", "", 1)
+	src = strings.Replace(src, ">86000<", ">87981 87981<", 1)
+	m := boss.ok("POST", "/api/legacy/upload", map[string]any{"html": src})
+	if m["legacy_id"] != "87981" {
+		t.Fatal("編號應該只留一個", m["legacy_id"])
+	}
+	save := boss.ok("POST", "/api/legacy/captures/"+itoa(id(m))+"/save", map[string]any{"customer_id": 0, "customer": map[string]any{"name": "春進-三G半夜", "address": ""}})
+	cust := boss.ok("GET", "/api/customers/"+itoa(n(save["customer_id"])), nil)
+	if cust["address"] != "（舊系統沒有地址）" {
+		t.Fatal("沒地址應該先放提示字", cust["address"])
+	}
+}

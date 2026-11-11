@@ -263,6 +263,10 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 	}
 
 	// 4. 整理
+	// 有些頁面同一格裡編號會出現兩次（「87981 87981」），只留一個
+	if f := strings.Fields(p.LegacyID); len(f) > 1 && f[0] == f[len(f)-1] {
+		p.LegacyID = f[0]
+	}
 	p.Phone, p.Phone2 = splitPhones(p.Phone)
 	p.Area = areaOf(p.Address)
 	p.TaxID = strings.TrimSpace(p.TaxID)
@@ -287,7 +291,7 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 		p.Warnings = append(p.Warnings, "沒讀到客戶名稱")
 	}
 	if p.Address == "" {
-		p.Warnings = append(p.Warnings, "沒讀到地址")
+		p.Warnings = append(p.Warnings, "舊系統沒有地址（存檔時會先寫「舊系統沒有地址」，之後再補）")
 	}
 	return p, nil
 }

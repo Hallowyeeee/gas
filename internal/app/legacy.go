@@ -355,8 +355,11 @@ func (a *App) saveCapture(r *http.Request, u *User) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if fields["name"] == nil || fields["address"] == nil {
-		return nil, bad("名字和地址一定要有")
+	if fields["name"] == nil {
+		return nil, bad("名字一定要有")
+	}
+	if fields["address"] == nil {
+		fields["address"] = "（舊系統沒有地址）" // 地址欄不能空，先放這句，之後補
 	}
 	targetID, _ := num(in["customer_id"]) // 0 = 新客戶
 
