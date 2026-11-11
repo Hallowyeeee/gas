@@ -155,3 +155,20 @@ func TestParseEZ88(t *testing.T) {
 		}
 	}
 }
+
+// 新客人打來 → 之後建檔 → 那通來電改成對到這位客人
+func TestBackfillCalls(t *testing.T) {
+	a, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	boss.ok("POST", "/api/calls/test", map[string]any{"phone": "0955111222"})
+	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "新客人", "phone": "0955-111-222", "address": "某路 1 號"}))
+	var got int64
+	a.DB.QueryRow(`SELECT COALESCE(customer_id,0) FROM call_logs WHERE phone = '0955111222'`).Scan(&got)
+	if got != cid {
+		t.Fatal("建檔後來電應該對到客戶", got, cid)
+	}
+	if m := boss.list("/api/calls/lookup?phone=0955111222"); len(m) != 1 {
+		t.Fatal("查電話應該找到", m)
+	}
+}

@@ -76,11 +76,23 @@ func orNotFound(err error, msg string) error {
 }
 
 func (a *App) createCustomer(r *http.Request, u *User) (any, error) {
-	return a.createSimple(r, "customers", customerFields)
+	res, err := a.createSimple(r, "customers", customerFields)
+	if err == nil {
+		if m, ok := res.(map[string]any); ok {
+			a.backfillCalls(r.Context(), m["id"].(int64))
+		}
+	}
+	return res, err
 }
 
 func (a *App) updateCustomer(r *http.Request, u *User) (any, error) {
-	return a.updateSimple(r, "customers", customerFields, "updated_at = datetime('now','localtime')")
+	res, err := a.updateSimple(r, "customers", customerFields, "updated_at = datetime('now','localtime')")
+	if err == nil {
+		if id, e := pathID(r); e == nil {
+			a.backfillCalls(r.Context(), id)
+		}
+	}
+	return res, err
 }
 
 func (a *App) setCustomerPrice(r *http.Request, u *User) (any, error) {

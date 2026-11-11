@@ -495,6 +495,7 @@ func (a *App) saveCapture(r *http.Request, u *User) (any, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	a.backfillCalls(ctx, targetID)
 	log.Printf("舊系統客戶 %s 已存成客戶 #%d（新增送貨紀錄 %d 筆）", p.LegacyID, targetID, added)
 	return map[string]any{"ok": true, "customer_id": targetID, "created": created, "deliveries_added": added,
 		"deliveries_total": len(p.Deliveries), "prices": priceCount, "refill_days": refill, "backup": backup}, nil

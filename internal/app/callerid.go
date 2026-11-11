@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"strings"
@@ -227,4 +228,27 @@ func (a *App) lookupCaller(r *http.Request, u *User) (any, error) {
 		return []any{}, nil
 	}
 	return a.findCallers(r.Context(), phone)
+}
+
+// backfillCalls 新建或改了客戶電話後，之前「沒對到客戶」的來電補上這位客戶，
+// 來電清單、未處理來電就不會再顯示成新客人。
+func (a *App) backfillCalls(ctx context.Context, customerID int64) {
+	var p1, p2 sql.NullString
+	if err := a.DB.QueryRowContext(ctx, `SELECT phone, phone2 FROM customers WHERE id = ?`, customerID).Scan(&p1, &p2); err != nil {
+		return
+	}
+	phones := []string{normalizePhone(p1.String), normalizePhone(p2.String)}
+	list, err := rows(ctx, a.DB, `SELECT id, phone FROM call_logs WHERE customer_id IS NULL AND received_at >= datetime('now','localtime','-60 days')`)
+	if err != nil {
+		return
+	}
+	for _, l := range list {
+		cp, _ := l["phone"].(string)
+		for _, ph := range phones {
+			if ph != "" && (ph == cp || samePhone(ph, cp)) {
+				a.DB.ExecContext(ctx, `UPDATE call_logs SET customer_id = ? WHERE id = ?`, customerID, l["id"])
+				break
+			}
+		}
+	}
 }

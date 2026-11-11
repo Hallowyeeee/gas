@@ -871,8 +871,13 @@ async function officeNew(view) {
       ${S.calls.some(k => k.state === 'done') ? '<button class="ghost" id="clearDone">清掉已處理</button>' : ''}</div>
       ${S.calls.map(k => callRowHTML(k, k.id === st.callId)).join('')}`;
   };
-  const takeCall = k => {
+  const takeCall = async k => {
     st.callId = k.id;
+    if (!(k.matches || []).length) {
+      // 來電當時是新客人，但可能已經建好檔（或用 F12 抓過）：再查一次
+      const m = await api('GET', '/api/calls/lookup?phone=' + encodeURIComponent(k.phone)).catch(() => []);
+      if (m.length) { k.matches = m; saveCalls(); drawCalls(); }
+    }
     const c = (k.matches || [])[0];
     if (c) { q.value = fmtPhone(k.phone); st.results = k.matches; renderResults(); pick(c, true); }
     else { drawCalls(); customerDialog({ phone: k.phone }, nc => { st.results = [nc]; renderResults(); pick(nc, true); }); }
@@ -911,18 +916,30 @@ async function officeNew(view) {
     const tk = e.target.closest('[data-take]');
     if (tk) { const l = unhandled.find(x => String(x.id) === tk.dataset.take); takeServerCall(l); return; }
     const nc = e.target.closest('[data-newc]');
-    if (nc) { const l = unhandled.find(x => x.phone === nc.dataset.newc); customerDialog({ phone: nc.dataset.newc }, c => { st.callId = l && l.id; pick(c, true); }); }
+    if (nc) { const l = unhandled.find(x => x.phone === nc.dataset.newc); const m = await api('GET', '/api/calls/lookup?phone=' + encodeURIComponent(nc.dataset.newc)).catch(() => []); if (m.length) { st.callId = l && l.id; q.value = fmtPhone(nc.dataset.newc); pick(m[0], true); drawUnhandled(); return; } customerDialog({ phone: nc.dataset.newc }, c => { st.callId = l && l.id; pick(c, true); }); }
   };
   const takeServerCall = async l => {
     st.callId = l.id || null;
     q.value = fmtPhone(l.phone);
-    if (!l.customer_id) return customerDialog({ phone: l.phone }, c => pick(c, true));
+    if (!l.customer_id) {
+      const m = await api('GET', '/api/calls/lookup?phone=' + encodeURIComponent(l.phone)).catch(() => []);
+      if (m.length) { l.customer_id = m[0].id; } else return customerDialog({ phone: l.phone }, c => pick(c, true));
+    }
     const c = await api('GET', '/api/customers/' + l.customer_id).catch(() => null);
     if (c) pick(c, true);
     if (!l.id) q.value = '';
   };
   drawCalls();
   drawUnhandled();
+  // 排隊中「新客人」的來電：如果後來建好檔了，換成那位客人
+  (async () => {
+    let changed = false;
+    for (const k of S.calls.filter(k => !(k.matches || []).length)) {
+      const m = await api('GET', '/api/calls/lookup?phone=' + encodeURIComponent(k.phone)).catch(() => []);
+      if (m.length) { k.matches = m; changed = true; }
+    }
+    if (changed) { saveCalls(); drawCalls(); }
+  })();
   if (S.takeCall) { const k = S.takeCall; S.takeCall = null; takeServerCall(k); }
   else { const first = nextCall(); if (first && Date.now() - (first.ts || 0) < 10 * 60000) takeCall(first); }
 
