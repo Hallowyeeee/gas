@@ -606,3 +606,47 @@ func (a *App) legacyLast(ctx context.Context, id int64) (map[string]any, error) 
 		CAST(julianday(date('now','localtime')) - julianday(date(delivered_at)) AS INTEGER) AS days_ago
 		FROM legacy_deliveries WHERE customer_id = ? ORDER BY delivered_at DESC LIMIT 1`, id)
 }
+
+// fillLegacyPhones 之前用 F12 抓過、但畫面上沒電話所以沒存到電話的客人，
+// 從當時存下來的原始網頁找 customer_tel 補上。只補空的，失敗就算了。
+func fillLegacyPhones(db *sql.DB) {
+	rows, err := db.Query(`SELECT c.id, (SELECT raw_gz FROM legacy_captures lc WHERE lc.customer_id = c.id AND lc.status = 'saved' AND lc.raw_gz IS NOT NULL ORDER BY lc.id DESC LIMIT 1)
+		FROM customers c WHERE c.legacy_id IS NOT NULL AND (c.phone IS NULL OR TRIM(c.phone) = '')`)
+	if err != nil {
+		return
+	}
+	type fix struct {
+		id     int64
+		p1, p2 string
+	}
+	var fixes []fix
+	for rows.Next() {
+		var id int64
+		var gz []byte
+		if rows.Scan(&id, &gz) != nil || len(gz) == 0 {
+			continue
+		}
+		zr, err := gzip.NewReader(bytes.NewReader(gz))
+		if err != nil {
+			continue
+		}
+		raw, err := io.ReadAll(zr)
+		if err != nil {
+			continue
+		}
+		m := legacyTelRe.FindSubmatch(raw)
+		if m == nil {
+			continue
+		}
+		v, err := url.QueryUnescape(string(m[1]))
+		if err != nil || strings.TrimSpace(v) == "" {
+			continue
+		}
+		p1, p2 := splitPhones(v)
+		fixes = append(fixes, fix{id, p1, p2})
+	}
+	rows.Close()
+	for _, f := range fixes {
+		db.Exec(`UPDATE customers SET phone = ?, phone2 = COALESCE(NULLIF(phone2, ''), NULLIF(?, '')) WHERE id = ?`, f.p1, f.p2, f.id)
+	}
+}

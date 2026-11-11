@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -181,5 +182,26 @@ func TestLegacySaveWithoutAddress(t *testing.T) {
 	}
 	if cust["code"] != "87981" {
 		t.Fatal("客戶編號應該直接用舊編號", cust["code"])
+	}
+}
+
+// 之前抓過但沒存到電話的客人：開程式時從存下來的網頁補電話
+func TestFillLegacyPhones(t *testing.T) {
+	a, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	page, _ := os.ReadFile("testdata/easy88_order_form.html")
+	m := boss.ok("POST", "/api/legacy/upload", map[string]any{"html": string(page)})
+	save := boss.ok("POST", "/api/legacy/captures/"+itoa(id(m))+"/save", map[string]any{"customer_id": 0, "customer": map[string]any{"name": "沒電話的客人", "phone": "", "phone2": "", "address": "某路1號", "area": "", "tax_id": "", "note": "", "needs_invoice": false}})
+	cid := n(save["customer_id"])
+	var phone sql.NullString
+	a.DB.QueryRow(`SELECT phone FROM customers WHERE id = ?`, cid).Scan(&phone)
+	if phone.String != "" {
+		t.Fatal("這個測試要從沒電話開始", phone.String)
+	}
+	fillLegacyPhones(a.DB)
+	a.DB.QueryRow(`SELECT phone FROM customers WHERE id = ?`, cid).Scan(&phone)
+	if phone.String != "0912000111" {
+		t.Fatal("應該補上電話", phone.String)
 	}
 }

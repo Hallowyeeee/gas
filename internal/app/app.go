@@ -62,6 +62,7 @@ func OpenDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	fillLegacyPhones(db)
 	return db, nil
 }
 
