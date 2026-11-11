@@ -125,6 +125,12 @@ func migrate(db *sql.DB) error {
 			return err
 		}
 	}
+	// 舊系統抓過來的客人：「客戶編號」空著就直接用舊編號（別人已經用掉的不填）
+	if _, err := db.Exec(`UPDATE customers SET code = legacy_id
+		WHERE (code IS NULL OR code = '') AND legacy_id IS NOT NULL AND legacy_id <> ''
+		  AND NOT EXISTS (SELECT 1 FROM customers c2 WHERE c2.code = customers.legacy_id)`); err != nil {
+		return err
+	}
 	return nil
 }
 

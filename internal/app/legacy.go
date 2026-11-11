@@ -387,6 +387,12 @@ func (a *App) saveCapture(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 
+	// 「客戶編號」空著就直接用舊系統編號（已經有填、或別的客人用掉了就不動）
+	if _, err := tx.ExecContext(ctx, `UPDATE customers SET code = ? WHERE id = ? AND (code IS NULL OR code = '')
+		AND NOT EXISTS (SELECT 1 FROM customers WHERE code = ? AND id <> ?)`, p.LegacyID, targetID, p.LegacyID, targetID); err != nil {
+		return nil, err
+	}
+
 	// 舊系統其他資訊
 	prices, _ := json.Marshal(p.Prices)
 	totals, _ := json.Marshal(p.Totals)

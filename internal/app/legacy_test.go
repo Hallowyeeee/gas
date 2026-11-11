@@ -81,7 +81,7 @@ func TestLegacyCaptureFlow(t *testing.T) {
 		t.Fatal("存檔結果不對", save)
 	}
 	cust := boss.ok("GET", "/api/customers/"+itoa(old), nil)
-	if cust["name"] != "測試客戶甲" || cust["legacy_id"] != "86000" || cust["area"] != "中壢區" {
+	if cust["name"] != "測試客戶甲" || cust["legacy_id"] != "86000" || cust["code"] != "86000" || cust["area"] != "中壢區" {
 		t.Fatal("客戶資料沒更新", cust)
 	}
 	lg := cust["legacy"].(map[string]any)
@@ -178,5 +178,8 @@ func TestLegacySaveWithoutAddress(t *testing.T) {
 	cust := boss.ok("GET", "/api/customers/"+itoa(n(save["customer_id"])), nil)
 	if cust["address"] != "（舊系統沒有地址）" {
 		t.Fatal("沒地址應該先放提示字", cust["address"])
+	}
+	if cust["code"] != "87981" {
+		t.Fatal("客戶編號應該直接用舊編號", cust["code"])
 	}
 }
