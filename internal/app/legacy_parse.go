@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -23,6 +24,7 @@ type LegacyPage struct {
 	Name         string           `json:"name"`          // 客戶名稱
 	Phone        string           `json:"phone"`         // 客戶電話
 	Phone2       string           `json:"phone2"`        // 第二支電話（電話欄有兩支時）
+	Phones       []LegacyPhone    `json:"phones"`        // 舊系統「客戶電話」清單裡的全部電話
 	Address      string           `json:"address"`       // 客戶住址
 	Area         string           `json:"area"`          // 從地址抓出來的區（中壢區）
 	Invoice      string           `json:"invoice"`       // 統一發票欄（無須發票…）
@@ -37,6 +39,53 @@ type LegacyPage struct {
 	Deliveries   []LegacyDelivery `json:"deliveries"`    // 送貨紀錄
 	CylindersOut []LegacyCylinder `json:"cylinders_out"` // 出桶鋼瓶
 	Warnings     []string         `json:"warnings"`
+}
+
+// LegacyPhone 舊系統電話清單裡的一支電話。
+type LegacyPhone struct {
+	Tel  string `json:"tel"`
+	Note string `json:"note"` // 類別＋備註，例如「行動 老闆」
+}
+
+var legacyPhonesRe = regexp.MustCompile(`<div id="gas-phones">([^<]*)</div>`)
+
+// legacyPhoneList 讀小工具順便抓回來的電話清單（custPhone_data.asp 的 JSON，URI 編碼後塞在網頁最後）。
+func legacyPhoneList(src string) []LegacyPhone {
+	m := legacyPhonesRe.FindStringSubmatch(src)
+	if m == nil {
+		return nil
+	}
+	raw, err := url.PathUnescape(m[1])
+	if err != nil {
+		return nil
+	}
+	var list []map[string]any
+	if json.Unmarshal([]byte(raw), &list) != nil {
+		return nil
+	}
+	types := map[string]string{"A": "住家", "B": "公司", "C": "行動", "D": "傳真"}
+	var out []LegacyPhone
+	seen := map[string]bool{}
+	for _, it := range list {
+		str := func(k string) string {
+			switch v := it[k].(type) {
+			case string:
+				return strings.TrimSpace(v)
+			case float64:
+				return strconv.FormatFloat(v, 'f', -1, 64)
+			}
+			return ""
+		}
+		tel := str("tel")
+		key := normalizePhone(tel)
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		note := strings.TrimSpace(types[str("type")] + " " + str("remark"))
+		out = append(out, LegacyPhone{Tel: tel, Note: note})
+	}
+	return out
 }
 
 // LegacyDelivery 是一筆舊送貨紀錄。
@@ -280,6 +329,10 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 		}
 	}
 	p.Phone, p.Phone2 = splitPhones(p.Phone)
+	p.Phones = legacyPhoneList(src)
+	if p.Phone == "" && len(p.Phones) > 0 {
+		p.Phone = p.Phones[0].Tel
+	}
 	p.Area = areaOf(p.Address)
 	p.TaxID = strings.TrimSpace(p.TaxID)
 	if p.TaxID != "" && !regexp.MustCompile(`^\d{8}$`).MatchString(p.TaxID) {

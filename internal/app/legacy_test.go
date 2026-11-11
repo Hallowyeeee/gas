@@ -205,3 +205,41 @@ func TestFillLegacyPhones(t *testing.T) {
 		t.Fatal("應該補上電話", phone.String)
 	}
 }
+
+// F12 順便抓回來的電話清單：主要電話以外的存到「其他電話」，空白和重複的略過，再抓一次不會多存
+func TestLegacyPhoneList(t *testing.T) {
+	a, c := setup(t)
+	res := c.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	boss := c.as(res["token"].(string))
+	page, _ := os.ReadFile("testdata/easy88_order_form.html")
+	list := `[{"id":"1","tel":"0976000111","remark":"老闆","type":"C"},{"id":"2","tel":"0936000222","remark":"","type":""},{"id":"3","tel":"","remark":"","type":""},{"id":"4","tel":" ","remark":"","type":""},{"id":"5","tel":"0912000111","remark":"","type":""}]`
+	src := string(page) + `<div id="gas-phones">` + url.PathEscape(list) + `</div>`
+	for round := 0; round < 2; round++ {
+		m := boss.ok("POST", "/api/legacy/upload", map[string]any{"html": src})
+		got := boss.ok("GET", "/api/legacy/captures/"+itoa(id(m)), nil)
+		pg := got["page"].(map[string]any)
+		if ph := pg["phones"].([]any); len(ph) != 3 {
+			t.Fatal("應該讀到 3 支電話", ph)
+		}
+		target := int64(0)
+		if ms := got["matches"].([]any); len(ms) > 0 {
+			target = n(ms[0].(map[string]any)["id"])
+		}
+		save := boss.ok("POST", "/api/legacy/captures/"+itoa(id(m))+"/save", map[string]any{"customer_id": target,
+			"customer": map[string]any{"name": pg["name"], "phone": pg["phone"], "address": pg["address"]}})
+		want := int64(2)
+		if round == 1 {
+			want = 0
+		}
+		if n(save["phones_added"]) != want {
+			t.Fatal("新增的其他電話數不對", round, save["phones_added"])
+		}
+	}
+	var cnt int
+	var note sql.NullString
+	a.DB.QueryRow(`SELECT COUNT(*) FROM customer_phones`).Scan(&cnt)
+	a.DB.QueryRow(`SELECT note FROM customer_phones WHERE phone = '0976000111'`).Scan(&note)
+	if cnt != 2 || note.String != "行動 老闆" {
+		t.Fatal("其他電話應該 2 支、備註帶過來", cnt, note.String)
+	}
+}

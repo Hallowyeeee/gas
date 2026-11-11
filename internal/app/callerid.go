@@ -238,6 +238,13 @@ func (a *App) backfillCalls(ctx context.Context, customerID int64) {
 		return
 	}
 	phones := []string{normalizePhone(p1.String), normalizePhone(p2.String)}
+	if more, err := rows(ctx, a.DB, `SELECT phone FROM customer_phones WHERE customer_id = ?`, customerID); err == nil {
+		for _, m := range more {
+			if s, _ := m["phone"].(string); s != "" {
+				phones = append(phones, normalizePhone(s))
+			}
+		}
+	}
 	list, err := rows(ctx, a.DB, `SELECT id, phone FROM call_logs WHERE customer_id IS NULL AND received_at >= datetime('now','localtime','-60 days')`)
 	if err != nil {
 		return

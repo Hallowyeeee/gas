@@ -393,6 +393,38 @@ func (a *App) saveCapture(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 
+	// 舊系統電話清單裡的其他電話：只增加、不刪；主要號碼和已經有的不重複存
+	var mainPhone sql.NullString
+	tx.QueryRowContext(ctx, `SELECT phone FROM customers WHERE id = ?`, targetID).Scan(&mainPhone)
+	have := map[string]bool{normalizePhone(mainPhone.String): true}
+	if prs, err := tx.QueryContext(ctx, `SELECT phone FROM customer_phones WHERE customer_id = ?`, targetID); err == nil {
+		for prs.Next() {
+			var ph string
+			prs.Scan(&ph)
+			have[normalizePhone(ph)] = true
+		}
+		prs.Close()
+	}
+	phonesAdded := 0
+	for _, ph := range p.Phones {
+		k := normalizePhone(ph.Tel)
+		if k == "" || have[k] {
+			continue
+		}
+		have[k] = true
+		if mainPhone.String == "" { // 沒有主要號碼就先用這支
+			if _, err := tx.ExecContext(ctx, `UPDATE customers SET phone = ? WHERE id = ?`, ph.Tel, targetID); err != nil {
+				return nil, err
+			}
+			mainPhone.String = ph.Tel
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO customer_phones (customer_id, phone, note) VALUES (?, ?, ?)`, targetID, ph.Tel, nullIfEmpty(ph.Note)); err != nil {
+			return nil, err
+		}
+		phonesAdded++
+	}
+
 	// 舊系統其他資訊
 	prices, _ := json.Marshal(p.Prices)
 	totals, _ := json.Marshal(p.Totals)
@@ -506,7 +538,7 @@ func (a *App) saveCapture(r *http.Request, u *User) (any, error) {
 	}
 	a.backfillCalls(ctx, targetID)
 	log.Printf("舊系統客戶 %s 已存成客戶 #%d（新增送貨紀錄 %d 筆）", p.LegacyID, targetID, added)
-	return map[string]any{"ok": true, "customer_id": targetID, "created": created, "deliveries_added": added,
+	return map[string]any{"ok": true, "customer_id": targetID, "created": created, "deliveries_added": added, "phones_added": phonesAdded,
 		"deliveries_total": len(p.Deliveries), "prices": priceCount, "refill_days": refill, "backup": backup}, nil
 }
 

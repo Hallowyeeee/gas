@@ -1115,6 +1115,7 @@ async function loadCapture(id) {
     <label>備註（舊系統的注意事項）</label><textarea name="note" rows="2">${esc(p.note || '')}</textarea><div class="was" data-was="note"></div>
     <div class="capsum">
       <div>🛢 桶子：${bal.length ? bal.map(([s, q]) => `<span class="pill ${q > 0 ? 'bad' : 'blue'}">${esc(cylText(s, q))}</span>`).join(' ') : '<span class="muted">沒有借桶或寄桶</span>'}</div>
+      ${(p.phones || []).length ? `<div>📞 全部電話 ${p.phones.length} 支：${p.phones.map(x => esc(x.tel) + (x.note ? `<span class="muted">（${esc(x.note)}）</span>` : '')).join('、')}<span class="muted">　主要電話以外的會存到「其他電話」</span></div>` : ''}
       <div>🚚 送貨紀錄 <b>${(p.deliveries || []).length}</b> 筆${last ? `，最近一次 ${esc(last.at.slice(0, 10))}：${esc(last.items.map(i => i.size + '×' + i.qty).join('、'))}` : ''}${r.saved_deliveries ? `<span class="muted">（之前已存 ${r.saved_deliveries} 筆，重複的不會再存）</span>` : ''}</div>
       ${(p.cylinders_out || []).length ? `<div>🔖 出桶鋼瓶 ${p.cylinders_out.length} 支：${p.cylinders_out.map(c => esc(c.size + ' ' + c.barcode)).join('、')}</div>` : ''}
       ${prices.length ? `<div>💲 舊系統售價：${prices.map(([s, v]) => {
@@ -1146,7 +1147,7 @@ async function loadCapture(id) {
     try {
       const res = await api('POST', `/api/legacy/captures/${id}/save`, body);
       d.close('saved');
-      toast(`✓ 已存：${f.name}（新增送貨紀錄 ${res.deliveries_added} 筆${res.refill_days ? `，大約 ${res.refill_days} 天叫一次` : ''}）`, 'ok');
+      toast(`✓ 已存：${f.name}（${res.phones_added ? `其他電話 ${res.phones_added} 支，` : ''}新增送貨紀錄 ${res.deliveries_added} 筆${res.refill_days ? `，大約 ${res.refill_days} 天叫一次` : ''}）`, 'ok');
       store.del('c:/api/customers?limit=1000');
       rerender();
     } catch (err) { toast(err.message, 'bad'); }
@@ -1212,7 +1213,9 @@ function pages(d,pw,done){var w=d.defaultView,q='';try{q=w.str}catch(e){}if(!q||
 function batch(from){var ps=[];for(var p=from;p<from+10;p++)ps.push(get(w,base+'&page='+p+'&key=&_='+Date.now()));Promise.all(ps).then(function(hs){var last=0;hs.forEach(function(h){var add=0;rows(h).forEach(function(k){if(!seen[k]){seen[k]=1;add++}});if(add){out.push(h);n++}last=add});try{pw.document.body.innerHTML='<div style="font:bold 20px sans-serif;padding:24px">抓取中… 已多抓 '+n+' 頁</div>'}catch(e){}if(last&&from<200)batch(from+10);else done(out)})}batch(1)}
 function send(){var ds=all(window.top,[]),best=md(),live=has(best),list=live?[best]:ds,x=Math.max(0,(screen.availWidth||1200)-460),w=window.open('','gascap','width=460,height=220,left='+x+',top=40');if(!w){tip('✗ 小視窗被擋住了：請按網址列右邊的「已封鎖彈出式視窗」圖示，選「一律允許」，再按一次 F12');return}try{w.document.body.innerHTML='<div style="font:bold 20px sans-serif;padding:24px">抓取中…</div>'}catch(e){}
 var go=function(extra){var d=best,f=d.createElement('form');f.method='POST';f.action=U;f.target='gascap';f.acceptCharset='UTF-8';f.style.display='none';var add=function(k,v){var i=d.createElement('textarea');i.name=k;i.value=v;f.appendChild(i)};add('enc','uri');var sn=t.__gasSnap;if(!live&&sn){add('url',sn.u);add('title',sn.ti);add('html',encodeURIComponent(sn.h+extra))}list.forEach(function(x){add('url',x.location.href);add('title',x.title||'');add('html',encodeURIComponent(x.documentElement.outerHTML+(x===best?extra:'')))});d.body.appendChild(f);f.submit();f.remove()};
-if(!live)return go('');pages(best,w,function(hs){go(hs.length?'<div id="gas-more-pages">'+hs.join('')+'</div>':'')})}
+if(!live)return go('');var cw=best.defaultView,cid='';try{cid=(/customer_id=(\\d+)/.exec(cw.str||'')||[])[1]||''}catch(e){}if(!cid)cid=(/customer_id=(\\d+)/.exec(best.location.href)||[])[1]||'';
+var tel=cid?get(cw,new URL('../customer/custPhone_data.asp',best.location.href).href+'?xbtn=list&cid='+cid+'&_='+Date.now()):Promise.resolve('');
+pages(best,w,function(hs){tel.then(function(tj){go((hs.length?'<div id="gas-more-pages">'+hs.join('')+'</div>':'')+(/^\\s*\\[/.test(tj)?'<div id="gas-phones">'+encodeURIComponent(tj)+'</div>':''))})})}
 function key(e){if(e.key==='F12'||e.keyCode===123){e.preventDefault();e.stopPropagation();send()}}
 var t=window.top;
 function arm(w){try{var k=t.__gasKey;if(w.__gasK!==k){if(w.__gasK)w.removeEventListener('keydown',w.__gasK,true);w.__gasK=k;w.addEventListener('keydown',k,true)}}catch(e){}try{for(var i=0;i<w.frames.length;i++)arm(w.frames[i])}catch(e){}}
