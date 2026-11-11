@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -82,6 +83,8 @@ func (d LegacyDelivery) ItemsText() string {
 	}
 	return strings.Join(parts, "、")
 }
+
+var legacyTelRe = regexp.MustCompile(`customer_tel=([^&"'\s<>]+)`)
 
 var errNotCustomerPage = errors.New("這一頁不是客戶的訂單頁（找不到「客戶編號」），請先打開客戶的訂單輸入表再按 F12")
 
@@ -266,6 +269,15 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 	// 有些頁面同一格裡編號會出現兩次（「87981 87981」），只留一個
 	if f := strings.Fields(p.LegacyID); len(f) > 1 && f[0] == f[len(f)-1] {
 		p.LegacyID = f[0]
+	}
+	// 有些頁面畫面上沒有「客戶電話」，但網頁程式裡藏著 customer_tel=0917...（換頁用的變數）
+	if strings.TrimSpace(p.Phone) == "" {
+		if m := legacyTelRe.FindStringSubmatch(src); m != nil {
+			if v, err := url.QueryUnescape(m[1]); err == nil && strings.TrimSpace(v) != "" {
+				p.Phone = v
+				p.Warnings = append(p.Warnings, "畫面上沒有客戶電話，是從網頁裡藏的資料找到的，請看一下對不對")
+			}
+		}
 	}
 	p.Phone, p.Phone2 = splitPhones(p.Phone)
 	p.Area = areaOf(p.Address)

@@ -109,3 +109,20 @@ func TestParseLegacyMorePages(t *testing.T) {
 		t.Fatalf("第二頁讀錯：%+v", last)
 	}
 }
+
+// 畫面上沒有「客戶電話」那一格時，從網頁程式裡的 customer_tel 找
+func TestParseLegacyPageHiddenPhone(t *testing.T) {
+	b, err := os.ReadFile("testdata/easy88_order_form.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := strings.Replace(string(b), `<td align="center"><font size="4"><b>客戶電話</b></font></td>`, "", 1)
+	src = strings.Replace(src, `<td colspan="2" align="center"><font size="5"><b>0912000111</b></font></td>`, "", 1)
+	p, err := ParseLegacyPage(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Phone != "0912000111" || len(p.Warnings) == 0 {
+		t.Fatal("應該從 customer_tel 找到電話並提醒", p.Phone, p.Warnings)
+	}
+}
