@@ -1160,7 +1160,7 @@ async function orderDialog(cust, done) {
   const [products, drivers] = await Promise.all([data('/api/products'), data('/api/drivers')]);
   const dlg = $('#dlg');
   dlg.innerHTML = `<div class="row between" style="margin-bottom:10px"><h2 style="margin:0">記單</h2><button type="button" class="ghost" id="odClose">✕ 關閉（Esc）</button></div>
-    <div class="order-dlg"><section class="card" id="mid"></section><section class="card" id="right"></section></div>`;
+    <div class="order-dlg"><section class="card" id="mid"></section><section class="card" id="right"></section></div><div id="ohist"></div>`;
   dlg.classList.add('wide');
   const st = { customer: cust, qty: {}, results: [], date: today(), slot: '', driver: null, shifts: [], callId: null, pay: 'cash' };
   const ot = orderTaker({ products, drivers, st, onCreated: () => { dlg.close(); done && done(); } });
@@ -1168,6 +1168,9 @@ async function orderDialog(cust, done) {
   dlg.addEventListener('close', () => { dlg.classList.remove('wide'); dlg.innerHTML = ''; }, { once: true });
   dlg.showModal();
   ot.renderMid();
+  // 訂購紀錄：用最新的客戶資料（含舊系統送貨紀錄）
+  const full = cust.recent_orders ? cust : await api('GET', '/api/customers/' + cust.id).catch(() => null);
+  if (full && dlg.open) { $('#ohist', dlg).innerHTML = orderHistoryHTML(full); $$('.legacy-deliv', dlg).forEach(legacyMoreSync); }
 }
 
 // ---------------------------------------------------------------------
@@ -1274,10 +1277,21 @@ function legacyCustomerHTML(lg) {
       ${tot.length ? `<span class="muted">累計購買 ${tot.map(([s, v]) => esc(s) + ' ' + v).join('、')}</span>` : ''}</div>
     ${lg.cylinders_out.length ? `<h4>出桶鋼瓶（在客人那邊）</h4><div class="table-wrap"><table><tr><th>條碼</th><th>規格</th><th>下次檢驗</th><th>桶齡</th><th>出桶</th><th class="num">天數</th><th>司機</th></tr>
       ${lg.cylinders_out.map(c => `<tr><td>${esc(c.barcode)}</td><td>${esc(c.size || '')}</td><td>${esc(c.next_inspection || '')}${c.next_inspection && c.next_inspection < today() ? ' <span class="pill bad">過期</span>' : ''}</td><td>${c.age_years ?? ''}</td><td>${esc((c.out_at || '').slice(0, 10))}</td><td class="num">${c.days ?? ''}</td><td>${esc(c.driver_name || '')}</td></tr>`).join('')}</table></div>` : ''}
-    <h4>舊送貨紀錄 <span class="pill">${lg.deliveries.length}</span></h4>
-    <div class="table-wrap legacy-deliv"><table><tr><th>日期</th><th>品項</th><th class="num">金額</th><th>鋼瓶</th><th>付款</th><th>送貨員</th><th>備註</th></tr>
-      ${lg.deliveries.map((x, i) => `<tr ${i >= LEGACY_FIRST ? 'hidden' : ''}><td style="white-space:nowrap">${esc(x.delivered_at.slice(0, 16))}</td><td>${esc(x.items || '')}${x.stored_gas ? ' 存氣 ' + x.stored_gas : ''}</td><td class="num">${money(x.amount)}</td><td>${esc(x.cylinder || '')}</td><td>${esc(x.pay_status || '')}</td><td>${esc(x.driver_name || '')}</td><td>${esc(x.note || '')}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table>
-      <div class="row legacy-more"></div></div></div>`;
+    <p class="muted" style="margin-bottom:0">舊送貨紀錄 ${lg.deliveries.length} 筆，在「＋ 記單」視窗下面的訂購紀錄裡看。</p></div>`;
+}
+// 訂購紀錄（記單視窗下面）：新系統的訂單和舊系統送貨紀錄排在一起，最新的在上面
+function orderHistoryHTML(c) {
+  const rows = [
+    ...(c.recent_orders || []).filter(o => o.status !== 'cancelled').map(o => ({ at: o.delivered_at || o.ordered_at, items: o.summary || '', amount: o.total_amount,
+      pay: o.billing_type === 'monthly' ? '月結' : o.status !== 'delivered' ? STATUS[o.status] : o.paid_amount >= o.total_amount ? (o.pay_method === 'transfer' ? '轉帳' : '已收') : '欠 ' + money(o.total_amount - o.paid_amount),
+      driver: o.driver_name || '', note: o.note || '', src: '' })),
+    ...((c.legacy && c.legacy.deliveries) || []).map(x => ({ at: x.delivered_at, items: (x.items || '') + (x.stored_gas ? ' 存氣 ' + x.stored_gas : ''), amount: x.amount,
+      pay: x.pay_status || '', driver: x.driver_name || '', note: [x.cylinder, x.note].filter(Boolean).join('　'), src: '舊' })),
+  ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
+  return `<section class="card order-hist"><h3 style="margin-top:0">📜 訂購紀錄 <span class="pill">${rows.length}</span></h3>
+    <div class="table-wrap legacy-deliv"><table><tr><th>日期</th><th>品項</th><th class="num">金額</th><th>付款</th><th>送貨員</th><th>備註</th></tr>
+      ${rows.map((r, i) => `<tr ${i >= LEGACY_FIRST ? 'hidden' : ''}><td style="white-space:nowrap">${esc(String(r.at || '').slice(0, 10))}${r.src ? ' <span class="pill">舊系統</span>' : ''}</td><td>${esc(r.items)}</td><td class="num">${money(r.amount)}</td><td>${esc(r.pay)}</td><td>${esc(r.driver)}</td><td class="muted">${esc(r.note)}</td></tr>`).join('') || '<tr><td class="muted" colspan="6">還沒有訂購紀錄</td></tr>'}</table>
+      <div class="row legacy-more"></div></div></section>`;
 }
 // 舊送貨紀錄：先顯示 20 筆，每按一次多開 150 筆，可以收起
 const LEGACY_FIRST = 20, LEGACY_STEP = 150;
@@ -1496,7 +1510,6 @@ async function customerDetail(view, id) {
     if (k === 'info' || k === 'note') {
       sec.innerHTML = `<form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
         <label style="margin:0;color:var(--text)"><input type="checkbox" name="active_box" ${c.active ? '' : 'checked'}>停用這位客戶</label></p></form>${legacyCustomerHTML(c.legacy)}`;
-  $$('.legacy-deliv').forEach(legacyMoreSync);
       $('#morePhones').onclick = () => phonesDialog(id, reload);
       if (k === 'note') { const n = $('[name=order_note]', sec); n.scrollIntoView({ block: 'center' }); n.focus(); }
       $('#f').onsubmit = async e => {

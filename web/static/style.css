@@ -298,3 +298,4 @@ dialog.wide { width:min(1100px, 96vw); }
 .job-lines { margin:6px 0; padding:6px 10px; border-radius:8px; background:var(--bg, rgba(0,0,0,.03)); }
 .job-lines .row { padding:2px 0; }
 .job-total { border-top:1px dashed var(--line); margin-top:4px; padding-top:4px !important; }
+.order-hist { margin-top:14px; }

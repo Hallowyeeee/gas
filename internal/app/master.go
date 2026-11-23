@@ -63,7 +63,10 @@ func (a *App) getCustomer(r *http.Request, u *User) (any, error) {
 	if c["deposits"], err = rows(ctx, a.DB, `SELECT * FROM v_customer_deposits WHERE customer_id = ?`, id); err != nil {
 		return nil, err
 	}
-	if c["recent_orders"], err = rows(ctx, a.DB, `SELECT id, order_no, status, total_amount, ordered_at, delivered_at FROM orders WHERE customer_id = ? ORDER BY id DESC LIMIT 20`, id); err != nil {
+	if c["recent_orders"], err = rows(ctx, a.DB, `SELECT o.id, o.order_no, o.status, o.total_amount, o.ordered_at, o.delivered_at, o.billing_type, o.pay_method, o.note, u.name AS driver_name,
+			(SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary,
+			COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0) AS paid_amount
+		FROM orders o LEFT JOIN users u ON u.id = o.driver_id WHERE o.customer_id = ? ORDER BY o.id DESC LIMIT 50`, id); err != nil {
 		return nil, err
 	}
 	if c["legacy"], err = a.customerLegacy(ctx, id); err != nil {
