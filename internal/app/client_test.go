@@ -22,7 +22,7 @@ func TestClientForwardsToMain(t *testing.T) {
 	c := c0.as(res["token"].(string))
 
 	st := &Station{Mode: "client", Server: "http://127.0.0.1:1", ManualIP: main.URL} // 外面網址故意連不到
-	cl := &Client{St: st, File: filepath.Join(t.TempDir(), "station.json"), lanTimeout: time.Second, publicTimeout: time.Second}
+	cl := &Client{St: st, File: filepath.Join(t.TempDir(), "station.json"), lanTimeout: time.Second, publicTimeout: time.Second, discoverTargets: []string{}}
 	cl.Pick(context.Background())
 	if cl.Via() != "lan" {
 		t.Fatalf("應該店內直連，結果 %q %v", cl.Via(), cl.status())
@@ -73,7 +73,7 @@ func TestClientForwardsToMain(t *testing.T) {
 func TestClientRejectsOtherServer(t *testing.T) {
 	_, c := setup(t)
 	st := &Station{Mode: "client", Server: "http://127.0.0.1:1", ManualIP: c.srv.URL, ServerID: "別台"}
-	cl := &Client{St: st, lanTimeout: time.Second, publicTimeout: time.Second}
+	cl := &Client{St: st, lanTimeout: time.Second, publicTimeout: time.Second, discoverTargets: []string{}}
 	cl.Pick(context.Background())
 	if cl.Via() != "" {
 		t.Fatalf("身分碼不對不該連，結果 %q", cl.Via())
@@ -83,7 +83,7 @@ func TestClientRejectsOtherServer(t *testing.T) {
 // 主電腦連不到：網頁用內建的打開，API 斷線（畫面進入離線排隊）。
 func TestClientOffline(t *testing.T) {
 	st := &Station{Mode: "client", Server: "http://127.0.0.1:1"}
-	cl := &Client{St: st, Static: fstest.MapFS{"index.html": {Data: []byte("<h1>瓦斯行</h1>")}}, lanTimeout: 300 * time.Millisecond, publicTimeout: 300 * time.Millisecond}
+	cl := &Client{St: st, Static: fstest.MapFS{"index.html": {Data: []byte("<h1>瓦斯行</h1>")}}, lanTimeout: 300 * time.Millisecond, publicTimeout: 300 * time.Millisecond, discoverTargets: []string{}}
 	front := httptest.NewServer(cl.Handler())
 	defer front.Close()
 	resp, err := http.Get(front.URL + "/#/home")
@@ -141,7 +141,7 @@ func TestClientOldMain(t *testing.T) {
 		c.srv.Config.Handler.ServeHTTP(w, r)
 	}))
 	defer old.Close()
-	cl := &Client{St: &Station{Mode: "client", Server: old.URL}, lanTimeout: time.Second, publicTimeout: time.Second}
+	cl := &Client{St: &Station{Mode: "client", Server: old.URL}, lanTimeout: time.Second, publicTimeout: time.Second, discoverTargets: []string{}}
 	cl.Pick(context.Background())
 	if cl.Via() != "public" {
 		t.Fatalf("舊版主電腦也要能連，結果 %q %v", cl.Via(), cl.status())
