@@ -135,6 +135,10 @@ func (a *App) Handler() http.Handler {
 		a.OpenURL("line://")
 		return map[string]bool{"ok": true}, nil
 	}))
+	m.HandleFunc("GET /api/station", a.public(a.handleStationInfo))
+	m.HandleFunc("GET /api/local/station", a.public(a.handleLocalStation))
+	m.HandleFunc("PUT /api/local/station", a.public(a.handleLocalStation))
+	m.HandleFunc("POST /api/local/firewall", a.public(a.handleFirewall))
 	m.HandleFunc("GET /api/events", a.handleEvents)
 	m.HandleFunc("GET /api/push/key", a.route(a.pushKey))
 	m.HandleFunc("POST /api/push/subscribe", a.route(a.pushSubscribe))

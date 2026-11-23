@@ -32,7 +32,21 @@ func main() {
 	noBrowser := flag.Bool("no-browser", false, "不要開視窗（只跑後端）")
 	useBrowser := flag.Bool("browser", false, "用瀏覽器開，不用程式視窗")
 	startHidden := flag.Bool("tray", false, "開機自動啟動用：只在右下角，不跳出視窗")
+	setStation := flag.String("station", "", "安裝檔用：main = 這台是主電腦；client = 這台是分機")
 	flag.Parse()
+
+	stFile := app.StationPath(baseDir)
+	st := app.LoadStation(stFile)
+	if *setStation == "main" || *setStation == "client" {
+		if st.Mode != *setStation {
+			st.Mode = *setStation
+			if st.Mode == "client" && st.Server == "" {
+				st.Server = app.DefaultServer
+			}
+			st.Save(stFile)
+		}
+		return
+	}
 
 	var out io.Writer = os.Stdout
 	if logFile, err := os.OpenFile(filepath.Join(baseDir, "gas.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
@@ -41,6 +55,11 @@ func main() {
 	log.SetOutput(out)
 	app.Version = version
 	local := fmt.Sprintf("http://localhost:%d", *port)
+
+	if st.Mode == "client" {
+		runClient(st, stFile, *port, local, baseDir, exe, *noBrowser, *useBrowser, *startHidden)
+		return
+	}
 
 	// 已經開著了：叫原本的視窗出來就好
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
@@ -62,7 +81,7 @@ func main() {
 	ui := newUI(local, baseDir)
 	ui.hidden = *startHidden
 	restart := false
-	a := &app.App{DB: db, Static: web.Static(), ExePath: exe}
+	a := &app.App{DB: db, Static: web.Static(), ExePath: exe, Port: *port, Station: st, StationFile: stFile}
 	a.Restart = func() { restart = true; ui.Quit(); stop() }
 	a.Backup = &app.Backup{DB: db, DefaultDir: filepath.Join(baseDir, "backups")}
 	a.ShowWindow = ui.Show
@@ -85,25 +104,70 @@ func main() {
 	}()
 	log.Println("電腦請開：", local)
 
+	runUI(ctx, ui, local, *noBrowser, *useBrowser)
+	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	srv.Shutdown(shutdown)
+	cancel()
+	db.Close()
+	finish(restart, exe, baseDir)
+}
+
+// runClient 分機：不開資料庫、不開通道、不備份，只開程式視窗連主電腦。
+func runClient(st *app.Station, stFile string, port int, local, baseDir, exe string, noBrowser, useBrowser, hidden bool) {
+	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if err != nil {
+		if bringToFront(port) {
+			return
+		}
+		fatal(fmt.Sprintf("埠號 %d 被其他程式占用，無法啟動。", port), err)
+	}
+	log.Println("瓦斯行管理系統（分機）啟動，版本", version, "，主電腦網址", st.Server)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	ui := newUI(local, baseDir)
+	ui.hidden = hidden
+	ui.client = true
+	restart := false
+	doRestart := func() { restart = true; ui.Quit(); stop() }
+	c := &app.Client{St: st, File: stFile, Static: web.Static(), Show: ui.Show, OpenURL: openBrowser, Restart: doRestart}
+	c.Pick(ctx) // 先找一次，視窗一打開就連得上
+	go c.Run(ctx)
+	upd := &app.App{ExePath: exe, Restart: doRestart}
+	go upd.CheckUpdateOnStart(ctx, ui.Notify)
+
+	srv := &http.Server{Handler: c.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Println("網頁服務錯誤：", err)
+		}
+	}()
+	runUI(ctx, ui, local, noBrowser, useBrowser)
+	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	srv.Shutdown(shutdown)
+	cancel()
+	finish(restart, exe, baseDir)
+}
+
+func runUI(ctx context.Context, ui *ui, local string, noBrowser, useBrowser bool) {
 	switch {
-	case *noBrowser:
+	case noBrowser:
 		<-ctx.Done()
-	case *useBrowser:
+	case useBrowser:
 		openBrowser(local)
 		<-ctx.Done()
 	default:
 		ui.Run(ctx) // 一直到按「結束」才回來
 	}
-	shutdown, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	srv.Shutdown(shutdown)
-	cancel()
-	db.Close()
+}
+
+func finish(restart bool, exe, baseDir string) {
 	if restart {
-		log.Println("重新啟動新版")
+		log.Println("重新啟動")
 		cmd := exec.Command(exe)
 		cmd.Dir = baseDir
 		if err := cmd.Start(); err != nil {
-			fatal("新版啟動失敗，請手動雙擊 gas.exe：", err)
+			fatal("重新啟動失敗，請手動雙擊 gas.exe：", err)
 		}
 		return
 	}

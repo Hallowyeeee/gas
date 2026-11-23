@@ -41,8 +41,15 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 DesktopIcon=在桌面建立捷徑
 AutoStart=開機自動啟動（建議，師傅才隨時收得到單）
 Launch=現在打開瓦斯行管理系統
+StationGroup=這台電腦是：
+StationMain=主電腦（資料放這台、接來電盒，要一直開著）
+StationClient=分機（連到店裡的主電腦，自己不放資料）
+Firewall=讓店裡其他電腦連進來（Windows 會問一次「是否允許」，請按「是」）
 
 [Tasks]
+Name: "mainpc"; Description: "{cm:StationMain}"; GroupDescription: "{cm:StationGroup}"; Flags: exclusive
+Name: "mainpc\firewall"; Description: "{cm:Firewall}"
+Name: "clientpc"; Description: "{cm:StationClient}"; GroupDescription: "{cm:StationGroup}"; Flags: exclusive unchecked
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"
 Name: "autostart"; Description: "{cm:AutoStart}"
 
@@ -59,6 +66,9 @@ Name: "{autodesktop}\瓦斯行管理系統"; Filename: "{app}\gas.exe"; WorkingD
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GasShop"; ValueData: """{app}\gas.exe"" -tray"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
+Filename: "{app}\gas.exe"; Parameters: "-station main"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; Tasks: mainpc
+Filename: "{app}\gas.exe"; Parameters: "-station client"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; Tasks: clientpc
+Filename: "{sys}\cmd.exe"; Parameters: "/c netsh advfirewall firewall delete rule name=GasShop & netsh advfirewall firewall add rule name=GasShop dir=in action=allow protocol=TCP localport=8080 remoteip=localsubnet profile=any"; Verb: "runas"; Flags: shellexec runhidden waituntilterminated; Tasks: mainpc\firewall
 Filename: "{app}\gas.exe"; Description: "{cm:Launch}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]

@@ -256,12 +256,23 @@ function callCustomerHTML(c) {
     ${c.note ? `<div class="muted">📝 ${esc(c.note)}</div>` : ''}`;
 }
 
+// 這台電腦（主電腦 / 分機）：只有在店裡電腦的程式視窗裡才讀得到；手機、外面瀏覽器是 null
+S.station = null;
+async function loadStation() {
+  try { const r = await fetch('/api/local/station', { credentials: 'same-origin' }); S.station = r.ok ? await r.json() : null; }
+  catch { /* 主電腦連不到時分機也讀得到，讀不到就當一般瀏覽器 */ }
+  return S.station;
+}
+const popupOn = () => !S.station || S.station.popup !== false;
+
 // 好幾線同時打來：來電排在記單頁左邊，一通一通處理
 S.calls = (store.get('calls', []) || []).filter(c => c.day === today());
 const saveCalls = () => store.set('calls', S.calls);
 function showCall(call) {
   S.calls = [{ ...call, day: today(), ts: Date.now(), at: new Date().toTimeString().slice(0, 5), state: 'wait' }, ...S.calls.filter(x => x.id !== call.id)].slice(0, 30);
   saveCalls();
+  if (!popupOn()) { if (S.newPage) S.newPage.onCall(call); return; } // 這台設定不跳：只悄悄排進來電清單
+  if (S.station && S.station.mode === 'client' && call.source !== 'test') fetch('/api/local/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => { });
   ring();
   const c = (call.matches || [])[0];
   if (document.hidden && window.Notification && Notification.permission === 'granted') {
@@ -285,6 +296,60 @@ function callRowHTML(k, active) {
         ${lo ? `<span class="pill">上次 ${lo.days_ago <= 0 ? '今天' : lo.days_ago + ' 天前'}</span>` : ''}</div>`
       : `<div><b>新客人</b> <span class="muted">按一下建檔</span></div>${k.state === 'done' ? `<span class="pill ok">✓ ${esc(k.order_no || '已處理')}</span>` : ''}`}
   </div>`;
+}
+
+// ---------------------------------------------------------------------
+// 這台電腦：主電腦 / 分機、來電要不要跳
+// ---------------------------------------------------------------------
+async function stationSettingsCard(sys, admin) {
+  const st = await loadStation();
+  if (!st) return '';
+  const popup = `<label class="check-box"><input type="checkbox" id="stPopup" ${st.popup !== false ? 'checked' : ''}>有客人來電時，這台電腦跳出客人資料</label>`;
+  if (st.mode === 'client') {
+    const via = st.via === 'lan' ? `<span class="pill ok">店內直連</span> 主電腦 ${esc(st.address)}`
+      : st.via === 'public' ? `<span class="pill blue">走外面網路</span> ${esc(st.address)}<div class="muted">在店裡卻顯示這個，代表找不到主電腦的店內位址：請到主電腦的設定按「讓店裡電腦連進來」。</div>`
+      : `<span class="pill bad">連不到主電腦</span> <span class="muted">${esc(st.error || '')}</span><div class="muted">主電腦要開著、有網路。這段時間記的單會先排隊，連上後自動送出。</div>`;
+    return `<div class="card" id="station"><h3 style="margin-top:0">🖥 這台電腦：分機</h3>
+      <div>連線：${via}</div>
+      <div class="muted" style="margin-top:4px">資料都在主電腦，這台只是打開來用。分機版本 ${esc(st.version)}，半夜會自動更新。</div>
+      ${popup}
+      <details><summary>連線設定（通常不用改）</summary>
+        <label>主電腦外面的網址</label><input id="stServer" value="${esc(st.server || '')}" placeholder="https://gas.hallowyeeee.com">
+        <label>主電腦在店裡的位址（自動找不到時才填，例如 192.168.1.10）</label><input id="stIP" value="${esc(st.manual_ip || '')}" placeholder="留空 = 自動找">
+        <p class="row"><button id="stSave" class="primary">儲存並重新連線</button></p>
+        <p class="row"><button id="stToMain" class="danger">改成主電腦</button></p>
+        <div class="muted">改成主電腦：這台會開始放自己的資料庫，跟店裡主電腦的資料分開。除非要換主電腦，不然不要按。</div></details></div>`;
+  }
+  return `<div class="card" id="station"><h3 style="margin-top:0">🖥 這台電腦：主電腦</h3>
+    <div class="muted">資料庫在這台。店裡其他電腦裝好程式選「分機」就會自動連過來；在外面的分機走 ${esc(sys.tunnel_url || '固定網址')}。這台要一直開著，分機和師傅手機才能用。</div>
+    ${(st.lan || []).length ? `<div style="margin-top:6px">店內位址：${st.lan.map(u => esc(u.replace('http://', ''))).join('、')}</div>` : ''}
+    ${popup}
+    ${admin ? `<p class="row"><button id="stFirewall">讓店裡電腦連進來（打開防火牆）</button></p>
+      <div class="muted">分機在店裡卻顯示「走外面網路」才需要按。按了會跳出 Windows 視窗問「是否允許」，按「是」。</div>
+      <details><summary>把這台改成分機</summary>
+        <p class="muted">只有換新的主電腦時才用。改成分機後，這台的資料庫會留著但不再使用，請先確定新主電腦已經有資料。</p>
+        <p class="row"><button id="stToClient" class="danger">改成分機</button></p></details>` : ''}</div>`;
+}
+function bindStationSettings(view) {
+  const card = $('#station', view); if (!card) return;
+  const put = async (body, msg) => {
+    try {
+      const r = await fetch('/api/local/station', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || '儲存失敗');
+      if (d.restart) { toast('設定好了，程式會自動重新打開…', 'ok'); return; }
+      toast(msg, 'ok'); settings(view);
+    } catch (e) { toast(e.message, 'bad'); }
+  };
+  $('#stPopup', card).onchange = e => { S.station && (S.station.popup = e.target.checked); put({ popup: e.target.checked }, e.target.checked ? '這台電腦來電會跳出客人資料' : '這台電腦來電不跳了（還是會排進來電清單）'); };
+  const save = $('#stSave', card); if (save) save.onclick = () => put({ server: $('#stServer').value, manual_ip: $('#stIP').value }, '已儲存，重新連線');
+  const toMain = $('#stToMain', card); if (toMain) toMain.onclick = () => { if (confirm('確定把這台改成主電腦？這台會開始用自己的資料庫，和現在主電腦的資料分開。')) put({ mode: 'main' }); };
+  const toClient = $('#stToClient', card); if (toClient) toClient.onclick = () => { if (confirm('確定把這台改成分機？這台的資料庫會停用，之後資料都看主電腦。')) put({ mode: 'client' }); };
+  const fw = $('#stFirewall', card); if (fw) fw.onclick = async () => {
+    fw.disabled = true; toast('Windows 會問「是否允許」，請按「是」');
+    try { const r = await fetch('/api/local/firewall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || '失敗'); toast('防火牆打開了，店裡分機會自動改成店內直連', 'ok'); }
+    catch (e) { toast(e.message, 'bad'); } finally { fw.disabled = false; }
+  };
 }
 
 async function callSettingsCard() {
@@ -1642,11 +1707,12 @@ async function settings(view) {
         <td>${esc(d.last_ack_at || '還沒有')}</td><td><button class="ghost" data-ptest="${d.id}" ${d.phones ? '' : 'disabled'}>送測試</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">還沒有師傅帳號</td></tr>'}</table>
       ${admin ? `<label>派單幾分鐘師傅還沒看，就在電腦上變紅色、手機再響一次（0 = 不提醒）</label>
       <p class="row"><input id="remindMin" type="number" min="0" max="120" value="${ps.remind_minutes}" style="width:100px"> 分鐘 <button id="saveRemind">儲存</button></p>` : ''}</div>`;
+  const stationCard = await stationSettingsCard(sys, admin);
   const cm = cfg.charge_mode || 'cylinder';
   const chargeCard = admin ? `<div class="card"><h3 style="margin-top:0">💰 本店收費方式</h3>
       <p class="muted">只用一種的話，另一種的欄位會整個藏起來。選「計流量」或「兩種都有」，客戶資料會多「收費方式、錶號、每度單價」，師傅手機會多「抄錶」。</p>
       <div class="segment" id="cmode" style="max-width:480px">${[['cylinder', '只算桶'], ['meter', '只計流量'], ['both', '兩種都有']].map(([k, v]) => `<button type="button" class="${cm === k ? 'on' : ''}" data-cm="${k}">${v}</button>`).join('')}</div></div>` : '';
-  view.innerHTML = `<h2>⚙️ 設定</h2>${chargeCard}${notifyCard}${callCard}${legacyCard}
+  view.innerHTML = `<h2>⚙️ 設定</h2>${stationCard}${chargeCard}${notifyCard}${callCard}${legacyCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -1675,6 +1741,7 @@ async function settings(view) {
   S.live = false;
   bindCallSettings(view);
   bindLegacySettings(view);
+  bindStationSettings(view);
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   $('#notify').onclick = async e => {
     const b = e.target.closest('[data-ptest]'); if (!b) return;
@@ -2163,6 +2230,7 @@ document.addEventListener('keydown', e => { if (e.key === 'F2' && S.me && S.me.r
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { });
 (async () => {
   S.me = store.get('me', null);
+  loadStation();
   if (S.me) route(); // 先用上次的登入資料馬上顯示
   try { S.me = await api('GET', '/api/me'); store.set('me', S.me); }
   catch (e) { if (!e.network) { S.me = null; store.del('me'); } }

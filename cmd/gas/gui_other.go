@@ -11,6 +11,7 @@ import (
 type ui struct {
 	url    string
 	hidden bool
+	client bool
 }
 
 func newUI(url, dir string) *ui { return &ui{url: url} }

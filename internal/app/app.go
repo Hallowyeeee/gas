@@ -44,6 +44,11 @@ type App struct {
 	mu sync.Mutex // 產生單號時避免重複
 
 	callerBox *CallerBox
+
+	// Port 網頁埠號；Station、StationFile 是「這台電腦」的設定（主電腦/分機、來電要不要跳）
+	Port        int
+	Station     *Station
+	StationFile string
 }
 
 // OpenDB 開啟（必要時建立）資料庫。

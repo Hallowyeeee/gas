@@ -47,6 +47,7 @@ type ui struct {
 	once     sync.Once
 	ready    chan struct{}
 	hidden   bool // 開機自動啟動：先藏在右下角
+	client   bool // 分機：結束程式不影響師傅收單
 }
 
 func newUI(url, dir string) *ui {
@@ -138,7 +139,12 @@ func (u *ui) tray() {
 		open := systray.AddMenuItem("打開瓦斯行", "")
 		browser := systray.AddMenuItem("用瀏覽器打開", "")
 		systray.AddSeparator()
-		quit := systray.AddMenuItem("結束程式（師傅會收不到單）", "")
+		label := "結束程式（師傅會收不到單）"
+		if u.client {
+			label = "結束程式"
+			systray.SetTooltip("瓦斯行管理系統（分機）")
+		}
+		quit := systray.AddMenuItem(label, "")
 		go func() {
 			for {
 				select {

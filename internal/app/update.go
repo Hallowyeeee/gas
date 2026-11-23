@@ -158,6 +158,9 @@ func (a *App) autoUpdateOn() bool {
 	if a.ExePath == "" || a.Restart == nil {
 		return false
 	}
+	if a.DB == nil {
+		return true // 分機沒有資料庫，一律半夜自動更新
+	}
 	var v string
 	a.DB.QueryRow(`SELECT value FROM settings WHERE key = 'auto_update'`).Scan(&v)
 	return v != "off"

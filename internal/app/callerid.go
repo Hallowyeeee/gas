@@ -166,7 +166,7 @@ func (a *App) IncomingCallLine(ctx context.Context, raw, source, line string) (m
 	callID, _ := res.LastInsertId()
 	call := map[string]any{"id": callID, "phone": phone, "source": source, "line": line, "matches": matches}
 	a.Events.Publish(0, Event{Type: "call", Call: call})
-	if source == "box" && a.ShowWindow != nil {
+	if source == "box" && a.ShowWindow != nil && a.Station.PopupOn() {
 		go a.ShowWindow()
 	}
 	log.Printf("來電 %s（%s，第 %s 線），對到 %d 位客戶", phone, source, line, len(matches))

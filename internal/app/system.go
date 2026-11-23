@@ -376,7 +376,7 @@ func lanAddresses(port int) []string {
 
 func (a *App) systemStatus(r *http.Request, u *User) (any, error) {
 	url, status := a.Tunnel.Info()
-	port := 0
+	port := a.Port
 	if a.Tunnel != nil {
 		port = a.Tunnel.Port
 	}
