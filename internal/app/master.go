@@ -13,7 +13,7 @@ import (
 // ---------------------------------------------------------------------
 
 var customerFields = []string{"code", "name", "phone", "phone2", "address", "area", "billing_type",
-	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "order_note", "price_raised_on", "active"}
+	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "order_note", "price_raised_on", "charge_type", "meter_no", "meter_price", "meter_start", "active"}
 
 func limitParam(r *http.Request, def int) int {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 1000 {

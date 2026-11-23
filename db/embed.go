@@ -25,3 +25,8 @@ var Dispatch string
 //
 //go:embed notify.sql
 var Notify string
+
+// Meter 計流量（抄錶）收費。每次開程式都跑（沒有才建），不佔版本號。
+//
+//go:embed meter.sql
+var Meter string

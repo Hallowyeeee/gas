@@ -142,6 +142,13 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("POST /api/push/test", a.route(a.pushTest))
 	m.HandleFunc("GET /api/push/status", a.route(a.pushStatus, office...))
 
+	m.HandleFunc("GET /api/meter/customers", a.route(a.meterCustomers))
+	m.HandleFunc("GET /api/meter/readings", a.route(a.listMeterReadings))
+	m.HandleFunc("POST /api/meter/readings", a.createMeterReading)
+	m.HandleFunc("GET /api/meter/readings/{id}/photo", a.meterPhoto)
+	m.HandleFunc("POST /api/meter/readings/{id}/cancel", a.route(a.cancelMeterReading, office...))
+	m.HandleFunc("GET /api/usage", a.route(a.usageStats, office...))
+
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "沒有這個功能"})
 	})

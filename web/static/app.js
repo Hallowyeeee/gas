@@ -363,7 +363,7 @@ const SECTION = {
   home: 'home', new: 'home', calls: 'home',
   dispatch: 'dispatch', today: 'dispatch', shifts: 'dispatch', orders: 'dispatch', order: 'dispatch',
   customers: 'customers',
-  money: 'money', dashboard: 'money', reconcile: 'money',
+  money: 'money', dashboard: 'money', reconcile: 'money', usage: 'money',
   stock: 'stock', products: 'stock', stocklist: 'stock',
 };
 const SLOT = { am: '上午', pm: '下午', eve: '晚上' };
@@ -399,9 +399,13 @@ let lastShell = '';
 async function route(soft) {
   if (!S.me) return showLogin();
   const driver = S.me.role === 'driver';
-  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送']] : OFFICE_NAV;
-  if (lastShell !== S.me.role + S.me.id) {
-    shell(nav); lastShell = S.me.role + S.me.id; connectEvents();
+  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '抄錶']] : [])] : OFFICE_NAV;
+  const shellKey = S.me.role + S.me.id + chargeMode();
+  if (lastShell !== shellKey) {
+    const first = !lastShell;
+    shell(nav); lastShell = shellKey; connectEvents();
+    // 本店收費方式（算桶／計流量）改了，師傅手機要多一個「抄錶」
+    if (first) api('GET', '/api/meter/customers').then(r => { if (r.mode && r.mode !== chargeMode()) { store.set('chargeMode', r.mode); lastShell = ''; route(); } }).catch(() => { });
     if (driver) syncPush();
     if (S.me.role === 'admin') api('GET', '/api/system').then(sys => {
       if (sys.update && sys.update.available) $('.nav').insertAdjacentHTML('beforeend', '<a href="#/settings" class="upd" style="color:var(--accent);font-weight:600">⬆ 有新版</a>');
@@ -414,12 +418,12 @@ async function route(soft) {
   const gear = $('.gear'); if (gear) gear.classList.toggle('on', page === 'settings');
   const view = $('#view');
   const views = driver
-    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone, 'my-help': driverHelp }
+    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone, 'my-help': driverHelp, meter: driverMeter }
     : {
       home: officeNew, new: officeNew, calls: callHistory,
       dispatch: hubDispatch, today: todayBoard, shifts: shiftsPage, orders: ordersQuery, order: orderDetail,
       customers: arg ? customerDetail : customerList,
-      money: hubMoney, dashboard: dashboardPage, reconcile,
+      money: hubMoney, dashboard: dashboardPage, reconcile, usage: usagePage,
       stock: hubStock, products: productList, stocklist: stockList,
       settings,
     };
@@ -507,6 +511,7 @@ async function hubMoney(view) {
   view.innerHTML = cardGrid('帳務', '', [
     { href: '#/dashboard', icon: '📊', title: '儀表板', desc: '今天完成多少、接單派送量、本週本月營業額、每月長條圖' },
     { href: '#/reconcile', icon: '🧾', title: '每日對帳', desc: '每位師傅收了多少、該交多少、交了沒' },
+    { href: '#/usage', icon: '📈', title: '用量統計', desc: chargeMode() === 'meter' ? '每位客人一個月用幾度、誰還沒抄錶' : chargeMode() === 'both' ? '每位客人一個月幾桶、幾度，誰還沒抄錶' : '每位客人一個月用幾桶，跟上個月比' },
     { href: '#/orders/cashdebt', icon: '⚠️', title: '現金欠款', desc: '送到了但錢沒收齊的現結單', count: debt.length || '', hl: debt.length > 0 },
     { href: '#/orders/monthlydebt', icon: '📒', title: '月結欠款', desc: '月結客戶目前還沒付的錢', count: monthly.length ? money(monthly.reduce((s, b) => s + b.balance, 0)) : '' },
   ]);
@@ -1361,6 +1366,11 @@ function customerFormHTML(c, drivers) {
     <div><label>結帳方式 <span class="muted">（沒勾＝現結）</span></label><label class="check-box"><input type="checkbox" name="monthly_box" ${c.billing_type === 'monthly' ? 'checked' : ''}>月結客戶</label></div>
     <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
     <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div>
+    ${chargeMode() === 'cylinder' ? '' : (() => { const ct = c.charge_type || (chargeMode() === 'meter' && !c.id ? 'meter' : 'cylinder'); const mf = ct === 'meter' ? '' : ' hidden'; return `
+    <div><label>收費方式</label><select name="charge_type" onchange="this.form.querySelectorAll('.meter-f').forEach(x => x.hidden = this.value !== 'meter')"><option value="cylinder" ${ct === 'cylinder' ? 'selected' : ''}>算桶</option><option value="meter" ${ct === 'meter' ? 'selected' : ''}>計流量（抄錶）</option></select></div>
+    <div class="meter-f"${mf}><label>錶號</label><input name="meter_no" value="${esc(c.meter_no ?? '')}"></div>
+    <div class="meter-f"${mf}><label>每度單價 <span class="muted">（沒填不能抄錶）</span></label><input name="meter_price" type="number" min="1" value="${c.meter_price ?? ''}"></div>
+    <div class="meter-f"${mf}><label>起始度數 <span class="muted">（選填，第一次抄錶前的錶數）</span></label><input name="meter_start" inputmode="decimal" value="${c.meter_start ?? ''}"></div>`; })()}
     <div><label>調漲日期</label><div class="row" style="flex-wrap:nowrap"><input type="date" name="price_raised_on" value="${esc(c.price_raised_on ?? '')}"><button type="button" class="ghost phone-card" onclick="this.previousElementSibling.value = today()">📅 填今天</button></div></div></div>
     <label>備註 <span class="muted">（店裡自己看）</span></label><textarea name="note">${esc(c.note || '')}</textarea>
     <label>訂單常態備註 <span class="muted">（每張單自動帶給師傅，例如：不要給好桶、按對講機 2 樓）</span></label><input name="order_note" value="${esc(c.order_note || '')}">`;
@@ -1372,6 +1382,7 @@ function readCustomerForm(form) {
   f.needs_invoice = !!(f.tax_id || f.invoice_title);
   f.billing_type = form.monthly_box.checked ? 'monthly' : 'cash'; delete f.monthly_box;
   f.price_raised_on = f.price_raised_on || null;
+  if ('meter_price' in f) { f.meter_price = parseInt(f.meter_price) || null; f.meter_start = f.meter_start.trim() === '' || isNaN(parseFloat(f.meter_start)) ? null : String(parseFloat(f.meter_start)); f.meter_no = f.meter_no.trim() || null; }
   return f;
 }
 async function customerDialog(c, done) {
@@ -1435,7 +1446,7 @@ async function customerDetail(view, id) {
   const tab = store.get('custTab', 'info');
   const gasList = products.filter(p => p.category === 'gas');
   const priceMap = Object.fromEntries((c.prices || []).map(x => [x.product_id, x.price]));
-  const noPrice = gasList.filter(p => priceMap[p.id] == null).length;
+  const noPrice = c.charge_type === 'meter' ? 0 : gasList.filter(p => priceMap[p.id] == null).length;
   view.innerHTML = `<p><a href="#/customers">← 客戶清單</a></p>
     <div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span>
       ${c.needs_invoice ? '<span class="pill blue">要發票</span>' : ''}${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}
@@ -1445,6 +1456,7 @@ async function customerDetail(view, id) {
       ${[['info', '📇', '基本資料', `電話 ${1 + (c.phones || []).length} 支・${esc(c.address)}`],
          ['orders', '🧾', '訂單', `最近 ${c.recent_orders.length} 張・共買 ${money(c.total_sales)}`],
          ['prices', '💲', '價格', noPrice ? `<span class="price-none">${noPrice} 種瓦斯還沒填價格</span>` : gasList.map(p => esc(p.name) + ' ' + money(priceMap[p.id])).join('・') + (c.price_raised_on ? `・調漲 ${esc(c.price_raised_on)}` : '')],
+         ...(c.charge_type === 'meter' ? [['meter', '🔢', '抄錶', c.meter_price ? `每度 ${money(c.meter_price)}${c.meter_no ? '・錶號 ' + esc(c.meter_no) : ''}` : '<span class="price-none">還沒填每度單價</span>']] : []),
          ['pays', '💵', '付款紀錄', `共付 ${money(c.total_paid)}`],
          ['note', '📝', '備註', c.order_note ? '常態備註：' + esc(c.order_note) : '還沒設常態備註']]
         .map(([k, ic, t, d]) => `<a class="hubcard${k === tab ? ' hl' : ''}" data-tab="${k}"><div class="ic">${ic}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
@@ -1498,6 +1510,17 @@ async function customerDetail(view, id) {
         const u = e.target.closest('[data-unprice]'); if (!u) return;
         await api('PUT', `/api/customers/${id}/prices`, { product_id: +u.dataset.unprice, price: null }).catch(err => toast(err.message, 'bad'));
         reload();
+      };
+      return;
+    } else if (k === 'meter') {
+      sec.innerHTML = '<div class="muted">載入中…</div>';
+      const list = await api('GET', '/api/meter/readings?customer_id=' + id).catch(() => []);
+      sec.innerHTML = `<div class="row between" style="margin-bottom:8px"><span class="muted">每次抄錶的度數、金額和照片。抄錯可以作廢（已收的錢不會自動刪）。</span><button class="primary" id="mAdd">＋ 抄錶</button></div>${meterReadingsHTML(list)}`;
+      $('#mAdd').onclick = () => meterDialog(id, reload);
+      sec.onclick = async e => {
+        const b = e.target.closest('[data-mcancel]'); if (!b) return;
+        if (!confirm('作廢這筆抄錶？金額不會再算進欠款。')) return;
+        try { await api('POST', `/api/meter/readings/${b.dataset.mcancel}/cancel`, {}); toast('已作廢'); reload(); } catch (err) { toast(err.message, 'bad'); }
       };
       return;
     } else if (k === 'pays') {
@@ -1619,7 +1642,11 @@ async function settings(view) {
         <td>${esc(d.last_ack_at || '還沒有')}</td><td><button class="ghost" data-ptest="${d.id}" ${d.phones ? '' : 'disabled'}>送測試</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">還沒有師傅帳號</td></tr>'}</table>
       ${admin ? `<label>派單幾分鐘師傅還沒看，就在電腦上變紅色、手機再響一次（0 = 不提醒）</label>
       <p class="row"><input id="remindMin" type="number" min="0" max="120" value="${ps.remind_minutes}" style="width:100px"> 分鐘 <button id="saveRemind">儲存</button></p>` : ''}</div>`;
-  view.innerHTML = `<h2>⚙️ 設定</h2>${notifyCard}${callCard}${legacyCard}
+  const cm = cfg.charge_mode || 'cylinder';
+  const chargeCard = admin ? `<div class="card"><h3 style="margin-top:0">💰 本店收費方式</h3>
+      <p class="muted">只用一種的話，另一種的欄位會整個藏起來。選「計流量」或「兩種都有」，客戶資料會多「收費方式、錶號、每度單價」，師傅手機會多「抄錶」。</p>
+      <div class="segment" id="cmode" style="max-width:480px">${[['cylinder', '只算桶'], ['meter', '只計流量'], ['both', '兩種都有']].map(([k, v]) => `<button type="button" class="${cm === k ? 'on' : ''}" data-cm="${k}">${v}</button>`).join('')}</div></div>` : '';
+  view.innerHTML = `<h2>⚙️ 設定</h2>${chargeCard}${notifyCard}${callCard}${legacyCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -1655,6 +1682,11 @@ async function settings(view) {
     catch (err) { toast(err.message, 'bad'); }
   };
   if (!admin) return;
+  $('#cmode').onclick = async e => {
+    const b = e.target.closest('[data-cm]'); if (!b) return;
+    try { await api('PUT', '/api/settings', { charge_mode: b.dataset.cm }); store.set('chargeMode', b.dataset.cm); toast('已改成：' + b.textContent, 'ok'); lastShell = ''; route(); }
+    catch (err) { toast(err.message, 'bad'); }
+  };
   $('#saveRemind').onclick = async () => {
     const v = Math.max(0, Math.min(120, parseInt($('#remindMin').value, 10) || 0));
     await api('PUT', '/api/settings', { remind_minutes: String(v) }); store.del('c:/api/push/status');
@@ -1949,6 +1981,177 @@ function driverHelp(view) {
     if (e.target.id === 'push') enablePush();
     if (e.target.id === 'pushTest') testPush();
   };
+}
+
+// ---------------------------------------------------------------------
+// 計流量（抄錶）：師傅輸入錶上的度數，程式算用了幾度、要收多少
+// ---------------------------------------------------------------------
+const chargeMode = () => store.get('chargeMode', 'cylinder');
+const fmtDeg = n => n == null ? '—' : (Math.round(n * 100) / 100).toLocaleString('zh-TW');
+// 照片壓小（最長邊 1280、JPEG），一張大約 100KB
+async function shrinkPhoto(file) {
+  const img = await createImageBitmap(file);
+  const s = Math.min(1, 1280 / Math.max(img.width, img.height));
+  const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.7);
+}
+// 抄錶表單（師傅手機、店裡客戶頁共用）。c = /api/meter/customers 的一位客人
+function meterFormHTML(c) {
+  const monthly = c.billing_type === 'monthly';
+  return `<div class="job"><div class="name">${esc(c.name)}</div><div class="addr">${esc(c.address || '')}${c.floor ? '・' + esc(c.floor) : ''}</div>
+      <div class="muted">錶號 ${esc(c.meter_no || '—')}・每度 ${c.meter_price ? money(c.meter_price) : '<span class="price-none">未填單價</span>'}${monthly ? '・<span class="pill blue">月結</span>' : ''}</div>
+      <div style="margin-top:6px">上次度數 <b>${c.last_reading == null ? '沒有（這次當起始）' : fmtDeg(c.last_reading)}</b>${c.last_read_at ? ` <span class="muted">${esc(c.last_read_at.slice(0, 10))}</span>` : ''}</div></div>
+    <label>這次錶上的度數</label><input name="reading" inputmode="decimal" required autocomplete="off" style="font-size:24px">
+    <div class="meter-calc" id="mcalc"></div>
+    <label>📷 錶的照片 <span class="muted">（選填，客人有疑問時可以對）</span></label>
+    <input type="file" name="photo" accept="image/*" capture="environment"><div id="mphoto"></div>
+    ${monthly ? '<p class="muted">月結客人：金額記到月底帳單，不用當場收。</p>' : `<label>當場收多少</label><input name="collected" type="number" inputmode="numeric" placeholder="沒收就留空">
+      <div class="segment" id="mpay"><button type="button" class="on" data-m="cash">現金</button><button type="button" data-m="transfer">轉帳</button></div>`}
+    <label>備註</label><input name="note" placeholder="例如：錶在後陽台">`;
+}
+function bindMeterForm(root, c, done) {
+  const f = $('form', root) || root;
+  let photo = '', amount = 0;
+  bindSegment(root);
+  const calc = () => {
+    const v = parseFloat(f.reading.value), box = $('#mcalc', root);
+    if (isNaN(v)) { box.innerHTML = ''; amount = 0; return; }
+    if (c.last_reading == null) { box.innerHTML = '<span class="muted">第一次抄錶，這次度數當作起始，不收錢</span>'; amount = 0; return; }
+    const use = Math.round((v - c.last_reading) * 100) / 100;
+    if (use < 0) { box.innerHTML = `<span class="price-none">比上次（${fmtDeg(c.last_reading)}）還小，請再看一次錶</span>`; amount = 0; return; }
+    amount = Math.round(use * (c.meter_price || 0));
+    const avg = c.prev_usage;
+    box.innerHTML = `用了 <b>${fmtDeg(use)}</b> 度 × ${money(c.meter_price || 0)} = <b class="big">${money(amount)}</b>${avg && use > avg * 3 ? ' <span class="pill bad">比平常多很多，再確認一次</span>' : ''}`;
+    if (f.collected && !f.collected.dataset.touched) f.collected.value = amount || '';
+  };
+  f.reading.oninput = calc;
+  if (f.collected) f.collected.oninput = () => { f.collected.dataset.touched = 1; };
+  f.photo.onchange = async () => {
+    const file = f.photo.files[0]; if (!file) return;
+    try { photo = await shrinkPhoto(file); $('#mphoto', root).innerHTML = `<img src="${photo}" class="meter-thumb big" alt="錶的照片">`; }
+    catch { toast('照片讀不到，再拍一次', 'bad'); }
+  };
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const v = parseFloat(f.reading.value);
+    if (isNaN(v)) return toast('請輸入度數', 'bad');
+    if (!c.meter_price) return toast('這位客人還沒填每度單價，請店裡先到客戶資料填', 'bad');
+    const body = { customer_id: c.id, reading: v, photo, note: f.note.value.trim() || null };
+    if (f.collected) { body.collected_amount = parseInt(f.collected.value) || 0; body.method = ($('#mpay .on', root) || {}).dataset?.m || 'cash'; }
+    if (body.collected_amount && body.collected_amount !== amount && !confirm(`收的錢（${money(body.collected_amount)}）跟應收（${money(amount)}）不一樣，確定嗎？`)) return;
+    const btn = $('button.ok, button.primary', f); if (btn) btn.disabled = true;
+    try { const r = await api('POST', '/api/meter/readings', body); toast(`已存：${fmtDeg(r.usage)} 度、${money(r.amount)}`, 'ok'); }
+    catch (err) {
+      if (!err.network) { if (btn) btn.disabled = false; return toast(err.message, 'bad'); }
+      queue('POST', '/api/meter/readings', body, `${c.name} 抄錶`); toast('沒連線，連上後會自動送出', 'ok');
+    }
+    store.del('c:/api/meter/customers');
+    done && done();
+  };
+}
+
+// 師傅手機：抄錶清單（這個月還沒抄的排前面）
+async function driverMeter(view, id) {
+  const r = await data('/api/meter/customers');
+  if (r.mode) store.set('chargeMode', r.mode);
+  const list = r.customers || [];
+  if (id) {
+    const c = list.find(x => x.id === +id);
+    if (!c) { view.innerHTML = '<div class="card">找不到這位客人。<a href="#/meter">回抄錶</a></div>'; return; }
+    S.live = false;
+    view.innerHTML = `<p><a href="#/meter">← 回抄錶清單</a></p><form class="card">${meterFormHTML(c)}<p><button class="ok lg">存檔</button></p></form>`;
+    bindMeterForm(view, c, () => { S.live = true; location.hash = '#/meter'; });
+    return;
+  }
+  const left = list.filter(c => !c.read_this_month).length;
+  view.innerHTML = `<h2>抄錶 ${left ? `<span class="pill accent">這個月還有 ${left} 戶</span>` : '<span class="pill ok">這個月都抄完了</span>'}</h2>
+    <input id="mq" placeholder="找名字、地址、錶號" style="margin-bottom:10px">
+    <div id="ml"></div>`;
+  const draw = () => {
+    const v = $('#mq').value.trim();
+    $('#ml').innerHTML = list.filter(c => !v || [c.name, c.address, c.meter_no, c.code].some(x => (x || '').includes(v))).map(c => `<div class="job click" data-m="${c.id}">
+      <div class="row between"><span class="name">${esc(c.name)}</span>${c.read_this_month ? '<span class="pill ok">✓ 本月已抄</span>' : '<span class="pill accent">還沒抄</span>'}</div>
+      <div class="addr">${esc(c.address || '')}${c.floor ? '・' + esc(c.floor) : ''}</div>
+      <div class="muted">錶號 ${esc(c.meter_no || '—')}・上次 ${fmtDeg(c.last_reading)}${c.last_read_at ? '（' + esc(c.last_read_at.slice(5, 10).replace('-', '/')) + '）' : ''}</div></div>`).join('')
+      || '<div class="card muted" style="text-align:center;padding:30px">沒有計流量的客人</div>';
+  };
+  draw();
+  $('#mq').oninput = draw;
+  $('#ml').onclick = e => { const j = e.target.closest('[data-m]'); if (j) location.hash = '#/meter/' + j.dataset.m; };
+}
+
+// 店裡：客戶頁的抄錶視窗
+async function meterDialog(customerId, done) {
+  const r = await api('GET', '/api/meter/customers');
+  const c = (r.customers || []).find(x => x.id === +customerId);
+  if (!c) return toast('這位客人不是計流量，或已停用', 'bad');
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<form><h2 style="margin-top:0">抄錶</h2>${meterFormHTML(c)}<p class="row"><button class="primary">存檔</button><button type="button" onclick="this.closest('dialog').close()">取消</button></p></form>`;
+  bindMeterForm(dlg, c, () => { dlg.close(); done && done(); });
+  dlg.showModal();
+  $('[name=reading]', dlg).focus();
+}
+function meterReadingsHTML(list) {
+  return `<div class="table-wrap"><table><tr><th>抄錶時間</th><th class="num">上次</th><th class="num">這次</th><th class="num">用量（度）</th><th class="num">單價</th><th class="num">金額</th><th>抄錶人</th><th>照片</th><th></th></tr>
+    ${list.map(m => `<tr style="${m.cancelled_at ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${esc(m.read_at)}</td><td class="num">${fmtDeg(m.prev_reading)}</td><td class="num">${fmtDeg(m.reading)}</td>
+      <td class="num"><b>${fmtDeg(m.usage)}</b></td><td class="num">${money(m.unit_price)}</td><td class="num">${money(m.amount)}${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}</td>
+      <td>${esc(m.read_by_name || '')}${m.note ? `<div class="muted">${esc(m.note)}</div>` : ''}</td>
+      <td>${m.has_photo ? `<a href="/api/meter/readings/${m.id}/photo" target="_blank"><img class="meter-thumb" src="/api/meter/readings/${m.id}/photo" alt="錶" loading="lazy"></a>` : ''}</td>
+      <td>${m.cancelled_at ? '已作廢' : `<button class="ghost" data-mcancel="${m.id}">作廢</button>`}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">還沒有抄錶紀錄</td></tr>'}</table></div>`;
+}
+
+// 帳務 → 用量統計
+async function usagePage(view, arg) {
+  const month = arg || store.get('usageMonth', '') || today().slice(0, 7);
+  store.set('usageMonth', month);
+  const d = await api('GET', '/api/usage?month=' + month);
+  const mode = d.mode || 'cylinder'; store.set('chargeMode', mode);
+  // 算桶：每位客人一列，各規格一欄
+  const sizes = [...new Set(d.cylinders.map(x => x.product_name))];
+  const byC = {};
+  for (const x of d.cylinders) {
+    const c = byC[x.customer_id] || (byC[x.customer_id] = { id: x.customer_id, name: x.name, code: x.code, address: x.address, q: {}, qty: 0, amount: 0 });
+    c.q[x.product_name] = x.qty; c.qty += x.qty; c.amount += x.amount;
+  }
+  const prev = Object.fromEntries(d.cylinders_prev.map(x => [x.customer_id, x.qty]));
+  const cyl = Object.values(byC).sort((a, b) => b.qty - a.qty);
+  const cylQty = cyl.reduce((s, c) => s + c.qty, 0), cylAmt = cyl.reduce((s, c) => s + c.amount, 0);
+  const prevQty = d.cylinders_prev.reduce((s, x) => s + x.qty, 0);
+  const meter = d.meter, read = meter.filter(m => m.usage != null);
+  const mUse = read.reduce((s, m) => s + m.usage, 0), mAmt = read.reduce((s, m) => s + m.amount, 0);
+  const tabs = mode === 'both' ? ['cyl', 'meter'] : [mode === 'meter' ? 'meter' : 'cyl'];
+  let tab = store.get('usageTab', tabs[0]); if (!tabs.includes(tab)) tab = tabs[0];
+  const diff = (n, p) => { const x = n - (p || 0); return !p ? '<span class="muted">—</span>' : x === 0 ? '<span class="muted">一樣</span>' : `<span style="color:var(--${x > 0 ? 'ok' : 'bad'})">${x > 0 ? '▲' : '▼'} ${fmtDeg(Math.abs(x))}</span>`; };
+  const [y, mo] = month.split('-').map(Number);
+  const shift = n => { const t = new Date(y, mo - 1 + n, 1); return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); };
+  view.innerHTML = `<p><a href="#/money">← 帳務</a></p>
+    <div class="row between"><h2 style="margin:0">用量統計</h2>
+      <div class="row" style="flex-wrap:nowrap"><button class="ghost" data-mon="${shift(-1)}">‹ 上個月</button><input type="month" id="mon" value="${month}" style="width:auto"><button class="ghost" data-mon="${shift(1)}">下個月 ›</button></div></div>
+    <div class="stat-row">
+      ${tabs.includes('cyl') ? `<div class="stat"><div class="muted">本月桶數</div><div class="n">${cylQty} 桶</div><div class="muted">上個月 ${prevQty} 桶・${money(cylAmt)}</div></div>` : ''}
+      ${tabs.includes('meter') ? `<div class="stat"><div class="muted">本月度數</div><div class="n">${fmtDeg(mUse)} 度</div><div class="muted">${money(mAmt)}・${meter.length - read.length ? `<span class="price-none">${meter.length - read.length} 戶還沒抄</span>` : '全部抄完'}</div></div>` : ''}
+      <div class="stat"><div class="muted">本月瓦斯收入</div><div class="n">${money(cylAmt + mAmt)}</div><div class="muted">${tabs.length > 1 ? `算桶 ${money(cylAmt)}・計流量 ${money(mAmt)}` : '&nbsp;'}</div></div></div>
+    ${tabs.length > 1 ? `<div class="segment" id="utab" style="max-width:360px;margin:6px 0 10px"><button type="button" class="${tab === 'cyl' ? 'on' : ''}" data-t="cyl">算桶</button><button type="button" class="${tab === 'meter' ? 'on' : ''}" data-t="meter">計流量</button></div>` : ''}
+    <div class="card table-wrap">${tab === 'cyl' ? `<table><tr><th>客戶</th>${sizes.map(s => `<th class="num">${esc(s)}</th>`).join('')}<th class="num">合計</th><th class="num">上個月</th><th class="num">增減</th><th class="num">金額</th></tr>
+      ${cyl.map(c => `<tr class="click" data-c="${c.id}"><td><b>${esc(c.name)}</b>${c.code ? ` <span class="muted">${esc(c.code)}</span>` : ''}<div class="muted">${esc(c.address || '')}</div></td>
+        ${sizes.map(s => `<td class="num">${c.q[s] || ''}</td>`).join('')}<td class="num"><b>${c.qty}</b></td><td class="num">${prev[c.id] || ''}</td><td class="num">${diff(c.qty, prev[c.id])}</td><td class="num">${money(c.amount)}</td></tr>`).join('')
+        || `<tr><td class="muted" colspan="${sizes.length + 5}">這個月還沒有送達的瓦斯</td></tr>`}
+      ${cyl.length ? `<tr><th>合計</th>${sizes.map(s => `<th class="num">${cyl.reduce((n, c) => n + (c.q[s] || 0), 0)}</th>`).join('')}<th class="num">${cylQty}</th><th class="num">${prevQty}</th><th></th><th class="num">${money(cylAmt)}</th></tr>` : ''}</table>`
+      : `<table><tr><th>客戶</th><th>錶號</th><th class="num">上次度數</th><th class="num">這次度數</th><th class="num">用量（度）</th><th class="num">上個月</th><th class="num">金額</th><th>抄錶日</th><th>照片</th></tr>
+      ${meter.map(m => `<tr class="click" data-c="${m.customer_id}"><td><b>${esc(m.name)}</b>${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}<div class="muted">${esc(m.address || '')}</div></td><td>${esc(m.meter_no || '')}</td>
+        ${m.usage == null ? `<td colspan="3"><span class="pill accent">還沒抄</span></td><td class="num">${fmtDeg(m.prev_usage)}</td><td></td><td></td><td></td>`
+          : `<td class="num">${fmtDeg(m.from_reading)}</td><td class="num">${fmtDeg(m.to_reading)}</td><td class="num"><b>${fmtDeg(m.usage)}</b> ${diff(m.usage, m.prev_usage)}</td><td class="num">${fmtDeg(m.prev_usage)}</td><td class="num">${money(m.amount)}</td><td>${esc((m.read_at || '').slice(5, 10).replace('-', '/'))}</td>
+          <td>${m.photo_id ? `<a href="/api/meter/readings/${m.photo_id}/photo" target="_blank"><img class="meter-thumb" src="/api/meter/readings/${m.photo_id}/photo" alt="錶" loading="lazy"></a>` : ''}</td>`}</tr>`).join('')
+        || '<tr><td class="muted" colspan="9">還沒有計流量的客人。到客戶資料把「收費方式」改成計流量。</td></tr>'}
+      ${read.length ? `<tr><th colspan="4">合計</th><th class="num">${fmtDeg(mUse)}</th><th></th><th class="num">${money(mAmt)}</th><th colspan="2"></th></tr>` : ''}</table>`}</div>`;
+  view.onclick = e => {
+    if (e.target.closest('a')) return;
+    const mb = e.target.closest('[data-mon]'); if (mb) return usagePage(view, mb.dataset.mon);
+    const t = e.target.closest('[data-t]'); if (t) { store.set('usageTab', t.dataset.t); return usagePage(view, month); }
+    const tr = e.target.closest('[data-c]'); if (tr) location.hash = '#/customers/' + tr.dataset.c;
+  };
+  $('#mon').onchange = e => e.target.value && usagePage(view, e.target.value);
 }
 
 // 電腦版快捷鍵：F2 記單

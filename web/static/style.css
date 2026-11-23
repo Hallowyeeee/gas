@@ -283,3 +283,10 @@ dialog.wide { width:min(1100px, 96vw); }
 .order-dlg .card { margin:0; }
 @media (max-width:800px) { .order-dlg { grid-template-columns:1fr; } }
 .chip.acc.on .x { color:#fff; }
+/* 抄錶、用量統計 */
+.meter-calc { margin:8px 0; font-size:18px; min-height:24px; }
+.meter-thumb { width:48px; height:48px; object-fit:cover; border-radius:6px; border:1px solid var(--line); vertical-align:middle; }
+.meter-thumb.big { width:100%; max-width:320px; height:auto; margin-top:8px; }
+.stat-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin:14px 0; }
+.stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+.stat .n { font-size:30px; font-weight:700; margin:4px 0; }
