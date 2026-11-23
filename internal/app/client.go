@@ -119,12 +119,16 @@ func (c *Client) fetchInfo(ctx context.Context, base string, timeout time.Durati
 	}
 	defer resp.Body.Close()
 	var in stationInfo
+	if resp.StatusCode == http.StatusNotFound && strings.Contains(resp.Header.Get("Content-Type"), "json") {
+		return nil, errOldMain // 是瓦斯行，只是主電腦還沒更新到有分機功能的版本
+	}
 	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&in) != nil || in.ID == "" {
 		return nil, errNotGas
 	}
 	return &in, nil
 }
 
+var errOldMain = &apiError{http.StatusNotFound, "主電腦還是舊版"}
 var errNotGas = &apiError{http.StatusBadGateway, "這個位址不是瓦斯行主電腦"}
 
 // lanCandidates 店內可以試的位址：手動填的優先，再來是主電腦告訴我們的。
@@ -186,6 +190,11 @@ func (c *Client) Pick(ctx context.Context) {
 		return
 	}
 	info, err := c.fetchInfo(ctx, server, c.publicTimeout)
+	if err == errOldMain {
+		// 主電腦還沒更新：先走外面網址照樣能用，主電腦更新後就會自動改成店內直連
+		c.set(server, "public", "")
+		return
+	}
 	if err != nil {
 		c.set("", "", "連不到主電腦："+shortErr(err))
 		return

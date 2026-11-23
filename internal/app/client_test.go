@@ -127,3 +127,21 @@ func TestStationOnMain(t *testing.T) {
 		t.Fatalf("外面不能改這台電腦設定，%d", resp.StatusCode)
 	}
 }
+
+// 主電腦還是舊版（沒有 /api/station）：分機照樣走外面網址。
+func TestClientOldMain(t *testing.T) {
+	_, c := setup(t)
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/station" {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "沒有這個功能"})
+			return
+		}
+		c.srv.Config.Handler.ServeHTTP(w, r)
+	}))
+	defer old.Close()
+	cl := &Client{St: &Station{Mode: "client", Server: old.URL}, lanTimeout: time.Second, publicTimeout: time.Second}
+	cl.Pick(context.Background())
+	if cl.Via() != "public" {
+		t.Fatalf("舊版主電腦也要能連，結果 %q %v", cl.Via(), cl.status())
+	}
+}
