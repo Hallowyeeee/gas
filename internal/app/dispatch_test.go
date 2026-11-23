@@ -19,6 +19,7 @@ func TestDeliverySlotAndBoard(t *testing.T) {
 	ming := id(boss.ok("POST", "/api/users", map[string]any{"name": "阿明", "role": "driver", "login_name": "ming", "password": "pass1234"}))
 	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "phone": "0912000001", "address": "中正路 1 號"}))
 	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg 瓦斯", "category": "gas", "sale_price": 900}))
+	boss.ok("PUT", fmt.Sprint("/api/customers/", cid, "/prices"), map[string]any{"product_id": gas, "price": 900})
 	items := []any{map[string]any{"product_id": gas, "qty": 2}}
 	today := time.Now().Format("2006-01-02")
 	tomorrow := time.Now().AddDate(0, 0, 1).Format("2006-01-02")
@@ -77,6 +78,7 @@ func TestCashDebtFilter(t *testing.T) {
 	ming := id(boss.ok("POST", "/api/users", map[string]any{"name": "阿明", "role": "driver", "login_name": "ming", "password": "pass1234"}))
 	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 1 號"}))
 	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg 瓦斯", "category": "gas", "sale_price": 900}))
+	boss.ok("PUT", fmt.Sprint("/api/customers/", cid, "/prices"), map[string]any{"product_id": gas, "price": 900})
 	for _, paid := range []int{900, 500} {
 		o := boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": []any{map[string]any{"product_id": gas, "qty": 1}}, "driver_id": ming})
 		boss.ok("POST", fmt.Sprint("/api/orders/", id(o), "/deliver"), map[string]any{"collected_amount": paid})
@@ -173,6 +175,7 @@ func TestDashboard(t *testing.T) {
 	ming := id(boss.ok("POST", "/api/users", map[string]any{"name": "阿明", "role": "driver", "login_name": "ming", "password": "pass1234"}))
 	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 1 號"}))
 	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg 瓦斯", "category": "gas", "sale_price": 900}))
+	boss.ok("PUT", fmt.Sprint("/api/customers/", cid, "/prices"), map[string]any{"product_id": gas, "price": 900})
 	o := boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": []any{map[string]any{"product_id": gas, "qty": 2}}, "driver_id": ming})
 	boss.ok("POST", fmt.Sprint("/api/orders/", id(o), "/deliver"), map[string]any{"collected_amount": 1800})
 	boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": []any{map[string]any{"product_id": gas, "qty": 1}}})

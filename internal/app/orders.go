@@ -91,10 +91,13 @@ func (a *App) insertItems(ctx context.Context, tx *sql.Tx, orderID, customerID i
 		if it.UnitPrice != nil {
 			price = *it.UnitPrice
 		} else {
+			// 瓦斯只看這位客人自己的價格（沒填就是 0，可以先記單但不能派）；其他商品沒特價就用售價
 			err := tx.QueryRowContext(ctx, `SELECT COALESCE(
 				(SELECT price FROM customer_prices WHERE customer_id = ? AND product_id = ?),
-				(SELECT sale_price FROM products WHERE id = ?))`, customerID, it.ProductID, it.ProductID).Scan(&price)
-			if err != nil {
+				(SELECT CASE WHEN category = 'gas' THEN 0 ELSE sale_price END FROM products WHERE id = ?))`, customerID, it.ProductID, it.ProductID).Scan(&price)
+			if err == sql.ErrNoRows {
+				return bad("找不到商品")
+			} else if err != nil {
 				return err
 			}
 		}
@@ -373,6 +376,9 @@ func dispatchTx(ctx context.Context, tx *sql.Tx, id, driverID int64) error {
 	var role string
 	if err := tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ? AND active = 1`, driverID).Scan(&role); err != nil || role != "driver" {
 		return bad("請選擇師傅")
+	}
+	if missingGasPrice(tx, id) {
+		return bad(msgNoPrice)
 	}
 	// 換師傅就重新算「看到了沒」；同一位師傅只是改時段，已看的不用再看
 	res, err := tx.ExecContext(ctx, `UPDATE orders SET status = 'dispatched',

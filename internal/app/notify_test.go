@@ -104,6 +104,7 @@ func TestSeenAndRemind(t *testing.T) {
 	huaC := boss.as(boss.ok("POST", "/api/login", map[string]any{"login_name": "hua", "password": "pass1234"})["token"].(string))
 	cid := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 1 號"}))
 	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg 瓦斯", "category": "gas", "sale_price": 900}))
+	boss.ok("PUT", fmt.Sprint("/api/customers/", cid, "/prices"), map[string]any{"product_id": gas, "price": 900})
 	o := id(boss.ok("POST", "/api/orders", map[string]any{"customer_id": cid, "items": []any{map[string]any{"product_id": gas, "qty": 1}}}))
 	dispatch := func(d int64, slot string) {
 		boss.ok("POST", fmt.Sprint("/api/orders/", o, "/dispatch"), map[string]any{"driver_id": d, "delivery_slot": slot})

@@ -268,3 +268,18 @@ svg.bars text.val { fill:var(--text); font-size:11px; }
 .help-steps li { margin-bottom:10px; }
 .help-steps b { color:var(--accent); }
 .help-warn { background:var(--bad-soft); color:var(--bad); border-radius:8px; padding:8px 12px; font-weight:600; margin:8px 0; }
+/* 登入：記住的帳號 */
+.chip.acc { cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.chip.acc .x { padding:0 4px; min-height:0; }
+.chip.acc.on .muted { color:#fff; }
+/* 每位客人的價格 */
+.price-btn { border:1px dashed var(--line); background:transparent; color:inherit; padding:1px 6px; border-radius:6px; cursor:pointer; font:inherit; min-height:0; }
+.price-btn:hover { border-color:var(--accent); }
+.price-btn.none, .price-none { color:var(--bad); font-weight:600; }
+.price-btn.none { border-color:var(--bad); }
+/* 客戶頁的記單視窗 */
+dialog.wide { width:min(1100px, 96vw); }
+.order-dlg { display:grid; grid-template-columns:minmax(0,1fr) minmax(280px,360px); gap:14px; align-items:start; }
+.order-dlg .card { margin:0; }
+@media (max-width:800px) { .order-dlg { grid-template-columns:1fr; } }
+.chip.acc.on .x { color:#fff; }

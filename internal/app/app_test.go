@@ -140,6 +140,7 @@ func TestFullFlow(t *testing.T) {
 		t.Fatal("統編錯誤要擋", code, m)
 	}
 	boss.ok("PUT", fmt.Sprintf("/api/customers/%d/prices", chen), map[string]any{"product_id": gas, "price": 850})
+	boss.ok("PUT", fmt.Sprintf("/api/customers/%d/prices", wang), map[string]any{"product_id": gas, "price": 900})
 
 	// 搜尋客戶
 	if l := boss.list("/api/customers?q=0912000001"); len(l) != 1 {
@@ -320,6 +321,7 @@ func TestDispatchEventReachesDriver(t *testing.T) {
 	tok := c.ok("POST", "/api/login", map[string]any{"login_name": "ming", "password": "pass1234"})["token"].(string)
 	gas := id(boss.ok("POST", "/api/products", map[string]any{"name": "20kg", "category": "gas", "sale_price": 900}))
 	cust := id(boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 1 號"}))
+	boss.ok("PUT", fmt.Sprint("/api/customers/", cust, "/prices"), map[string]any{"product_id": gas, "price": 900})
 
 	req, _ := http.NewRequest("GET", c.srv.URL+"/api/events", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)

@@ -13,7 +13,7 @@ import (
 // ---------------------------------------------------------------------
 
 var customerFields = []string{"code", "name", "phone", "phone2", "address", "area", "billing_type",
-	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "order_note", "active"}
+	"default_driver_id", "refill_days", "floor", "has_elevator", "needs_invoice", "tax_id", "invoice_title", "note", "order_note", "price_raised_on", "active"}
 
 func limitParam(r *http.Request, def int) int {
 	if n, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && n > 0 && n <= 1000 {
@@ -116,9 +116,22 @@ func (a *App) setCustomerPrice(r *http.Request, u *User) (any, error) {
 	if !ok {
 		return nil, bad("價格必須是整數")
 	}
-	_, err = a.DB.ExecContext(r.Context(), `INSERT INTO customer_prices (customer_id, product_id, price) VALUES (?, ?, ?)
-		ON CONFLICT (customer_id, product_id) DO UPDATE SET price = excluded.price`, id, pid, price)
-	return nil, err
+	if price < 0 {
+		return nil, bad("價格不能是負的")
+	}
+	if _, err = a.DB.ExecContext(r.Context(), `INSERT INTO customer_prices (customer_id, product_id, price) VALUES (?, ?, ?)
+		ON CONFLICT (customer_id, product_id) DO UPDATE SET price = excluded.price`, id, pid, price); err != nil {
+		return nil, err
+	}
+	// 之前沒價格先記下來的單（還沒送達），順便補上這個價格
+	res, err := a.DB.ExecContext(r.Context(), `UPDATE order_items SET unit_price = ?1, amount = qty * ?1 - discount
+		WHERE product_id = ?2 AND unit_price = 0
+		  AND order_id IN (SELECT id FROM orders WHERE customer_id = ?3 AND status IN ('new','dispatched'))`, price, pid, id)
+	if err != nil {
+		return nil, err
+	}
+	n, _ := res.RowsAffected()
+	return map[string]any{"fixed_items": n}, nil
 }
 
 // ---------------------------------------------------------------------

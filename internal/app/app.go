@@ -132,6 +132,11 @@ func migrate(db *sql.DB) error {
 		  AND NOT EXISTS (SELECT 1 FROM customers c2 WHERE c2.code = customers.legacy_id)`); err != nil {
 		return err
 	}
+	// 調漲日期欄位、幫舊客人帶入瓦斯價格（不佔資料庫版本號）
+	if err := ensurePriceColumns(db); err != nil {
+		return err
+	}
+	seedCustomerPrices(db)
 	return nil
 }
 

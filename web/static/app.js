@@ -390,7 +390,7 @@ function shell(nav) {
   $('#logout').onclick = async () => {
     if (outbox.length && !confirm('還有資料沒送出，確定登出？')) return;
     await api('POST', '/api/logout').catch(() => { });
-    localStorage.clear(); location.hash = ''; location.reload();
+    const acc = store.get('accounts', []); localStorage.clear(); store.set('accounts', acc); location.hash = ''; location.reload();
   };
   setOnline(S.online); updatePending();
 }
@@ -442,6 +442,7 @@ async function showLogin() {
   document.body.innerHTML = `<main class="center"><h2><img src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:12px;vertical-align:middle;margin-right:8px">瓦斯行管理系統</h2>
     <div class="card" id="box"></div></main><div id="toast"></div>`;
   const box = $('#box');
+  const accs = store.get('accounts', []) || [];
   if (setup.needed && !setup.local) { box.innerHTML = '<p>系統還沒設定，請先在店裡電腦打開程式建立老闆帳號。</p>'; return; }
   box.innerHTML = setup.needed ? `
     <h3 style="margin-top:0">第一次使用：建立老闆帳號</h3>
@@ -449,15 +450,31 @@ async function showLogin() {
     <label>登入帳號（英文或數字）</label><input name="login_name" required autocomplete="username">
     <label>密碼（至少 6 個字）</label><input name="password" type="password" minlength="6" required autocomplete="new-password">
     <p><button class="primary lg">建立並登入</button></p></form>` : `
-    <form><label>帳號</label><input name="login_name" required autocomplete="username" autocapitalize="none">
+    <form>${accs.length ? `<label>選帳號</label><div class="chips" id="accs">${accs.map(a => `<span class="chip acc" data-acc="${esc(a.login_name)}">${esc(a.name || a.login_name)} <span class="muted">${esc(a.login_name)}</span><button type="button" class="ghost x" data-forget="${esc(a.login_name)}" title="不要記這個帳號">✕</button></span>`).join('')}</div>` : ''}
+    <label>帳號</label><input name="login_name" required autocomplete="username" autocapitalize="none">
     <label>密碼</label><input name="password" type="password" required autocomplete="current-password">
     <p><button class="primary lg">登入</button></p></form>`;
+  const pickAcc = n => {
+    const f = $('form', box); f.login_name.value = n; f.password.value = ''; f.password.focus();
+    $$('#accs .acc').forEach(x => x.classList.toggle('on', x.dataset.acc === n));
+  };
+  const ab = $('#accs');
+  if (ab) ab.onclick = e => {
+    const fg = e.target.closest('[data-forget]');
+    if (fg) { store.set('accounts', store.get('accounts', []).filter(a => a.login_name !== fg.dataset.forget)); return showLogin(); }
+    const a = e.target.closest('[data-acc]'); if (a) pickAcc(a.dataset.acc);
+  };
+  if (!setup.needed && accs.length) pickAcc(accs[0].login_name);
   $('form', box).onsubmit = async e => {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.target));
     try {
       const r = await api('POST', setup.needed ? '/api/setup' : '/api/login', body);
-      S.me = r.user; store.set('me', r.user); location.hash = ''; route();
+      S.me = r.user; store.set('me', r.user);
+      // 記住帳號（不記密碼），最近用的排第一個
+      const ln = r.user.login_name || body.login_name;
+      store.set('accounts', [{ login_name: ln, name: r.user.name }, ...(store.get('accounts', []) || []).filter(a => a.login_name !== ln)].slice(0, 10));
+      location.hash = ''; route();
     } catch (err) { toast(err.message, 'bad'); }
   };
 }
@@ -831,7 +848,6 @@ async function officeNew(view) {
   const [products, drivers] = await Promise.all([data('/api/products'), data('/api/drivers')]);
   const t = today();
   const st = { customer: null, qty: {}, results: [], date: t, slot: '', driver: null, shifts: [], callId: null, pay: 'cash' };
-  const sellable = products.filter(p => p.category !== 'empty_cylinder');
   view.innerHTML = `<div class="home-grid"><div class="home-left">
       <section class="card callstack" id="calls" hidden></section>
       <section class="card" id="unhandled" hidden></section>
@@ -841,6 +857,11 @@ async function officeNew(view) {
         <div class="row between" style="margin-top:8px"><button class="ghost" id="newCust">＋ 新客戶</button><a class="muted" href="#/calls">📜 歷史來電 ›</a></div></section></div>
     <section class="card" id="mid"><div class="muted empty">先在左邊選客戶，或點一通來電</div></section>
     <section class="card" id="right"></section></div>`;
+  const ot = orderTaker({ products, drivers, st, onCreated: o => {
+    const k = S.calls.find(x => x.id === st.callId); if (k) { k.state = 'done'; k.order_no = o ? o.order_no : '離線排隊中'; saveCalls(); }
+    officeNew(view);
+  } });
+  const renderMid = () => ot.renderMid();
   const q = $('#q');
   q.focus();
   let timer;
@@ -880,7 +901,17 @@ async function officeNew(view) {
     }
     const c = (k.matches || [])[0];
     if (c) { q.value = fmtPhone(k.phone); st.results = k.matches; renderResults(); pick(c, true); }
-    else { drawCalls(); customerDialog({ phone: k.phone }, nc => { st.results = [nc]; renderResults(); pick(nc, true); }); }
+    else { drawCalls(); newCaller(k.phone); }
+  };
+  // 新客人來電：不自動跳新增視窗，中間顯示「＋建檔」讓你自己決定
+  const newCaller = phone => {
+    st.customer = null; st.qty = {};
+    q.value = fmtPhone(phone);
+    $('#right').innerHTML = '';
+    $('#mid').innerHTML = `<div class="big">新客人 <span class="tel">${esc(fmtPhone(phone))}</span></div>
+      <p class="muted">這支電話還沒有建檔。可能是老客人用別支電話打來，可以先在左邊用名字或地址找找看。</p>
+      <p class="row"><button class="primary lg" id="ncAdd">＋ 建檔</button></p>`;
+    $('#ncAdd').onclick = () => customerDialog({ phone }, nc => { st.results = [nc]; renderResults(); pick(nc, true); });
   };
   const nextCall = () => [...S.calls].reverse().find(k => k.state === 'wait');
   $('#calls').onclick = e => {
@@ -889,7 +920,7 @@ async function officeNew(view) {
     if (e.target.id === 'clearDone') { S.calls = S.calls.filter(k => k.state !== 'done'); saveCalls(); drawCalls(); return; }
     const r = e.target.closest('[data-call]'); if (r) takeCall(S.calls.find(k => String(k.id) === r.dataset.call));
   };
-  S.newPage = {
+  const myPage = S.newPage = {
     onCall(call) {
       // 手上沒有在記的客人才自動帶出來；正在記別人就只排進清單
       if (!st.customer) takeCall(S.calls.find(k => k.id === call.id)); else drawCalls();
@@ -897,7 +928,8 @@ async function officeNew(view) {
       drawUnhandled();
     },
   };
-  window.addEventListener('hashchange', () => { S.newPage = null; }, { once: true });
+  // 只清掉自己這一頁的（重新進首頁時，新的一頁可能已經先建好了）
+  window.addEventListener('hashchange', () => { if (S.newPage === myPage) S.newPage = null; }, { once: true });
 
   // 未處理來電（打來了但還沒下單；重開程式也不會不見）
   let unhandled = [];
@@ -949,8 +981,30 @@ async function officeNew(view) {
     drawCalls(); renderResults();
     renderMid();
   }
-  const priceOf = pid => { const p = products.find(x => x.id === +pid); const sp = ((st.customer && st.customer.prices) || []).find(x => x.product_id === +pid); return sp ? sp.price : (p ? p.sale_price : 0); };
-  const total = () => Object.entries(st.qty).reduce((s, [pid, n]) => s + n * priceOf(pid), 0);
+}
+
+// 記單區（中間挑品項、右邊下單）：首頁和客戶頁的「記單」視窗共用
+function orderTaker({ products, drivers, st, onCreated }) {
+  const t = today();
+  const sellable = products.filter(p => p.category !== 'empty_cylinder');
+  const prodOf = pid => products.find(x => x.id === +pid);
+  const custPrice = pid => ((st.customer && st.customer.prices) || []).find(x => x.product_id === +pid);
+  // 瓦斯只用這位客人自己的價格（沒填 = null）；其他商品沒特價就用售價
+  const priceOf = pid => { const p = prodOf(pid), sp = custPrice(pid); if (sp) return sp.price; return p && p.category === 'gas' ? null : (p ? p.sale_price : 0); };
+  const missing = () => Object.keys(st.qty).filter(pid => priceOf(pid) == null);
+  const total = () => Object.entries(st.qty).reduce((s, [pid, n]) => s + n * (priceOf(pid) || 0), 0);
+  async function setPrice(pid) {
+    const p = prodOf(pid), cur = priceOf(pid);
+    const v = prompt(`${st.customer.name} 的「${p.name}」價格`, cur ?? '');
+    if (v == null || v.trim() === '') return;
+    const n = parseInt(v);
+    if (!(n > 0)) return toast('價格要填大於 0 的數字', 'bad');
+    try { await api('PUT', `/api/customers/${st.customer.id}/prices`, { product_id: +pid, price: n }); }
+    catch (e) { return toast(e.network ? '沒連線，價格要連上才能改' : e.message, 'bad'); }
+    st.customer.prices = [...(st.customer.prices || []).filter(x => x.product_id !== +pid), { product_id: +pid, name: p.name, price: n }];
+    toast(`已存成 ${st.customer.name} 的價格 ${money(n)}`, 'ok');
+    renderMid();
+  }
 
   async function renderMid() {
     const c = st.customer;
@@ -976,6 +1030,7 @@ async function officeNew(view) {
       ${others.length ? `<details ${others.some(p => st.qty[p.id]) ? 'open' : ''}><summary class="muted" style="margin:12px 0 6px;cursor:pointer">其他商品（${others.length}）</summary><div class="quick">${others.map(qbox).join('')}</div></details>` : ''}`;
     $('#mid').onclick = e => {
       const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.setprice) { setPrice(b.dataset.setprice); return; }
       if (b.id === 'rebuy') { st.qty = {}; last.items.forEach(i => { st.qty[i.product_id] = i.qty; }); sync(); toast('已照上一張單帶入'); return; }
       if (b.dataset.plus || b.dataset.minus) {
         const pid = b.dataset.plus || b.dataset.minus;
@@ -990,8 +1045,8 @@ async function officeNew(view) {
     sync();
   }
   function qbox(p) {
-    const sp = (st.customer.prices || []).find(x => x.product_id === p.id);
-    return `<div class="q" data-p="${p.id}"><div><b>${esc(p.name)}</b></div><div class="muted">${money(sp ? sp.price : p.sale_price)}${sp ? '（特價）' : ''}${p.stock_qty != null ? '・庫存 ' + p.stock_qty : ''}</div>
+    const sp = custPrice(p.id), pr = priceOf(p.id);
+    return `<div class="q" data-p="${p.id}"><div><b>${esc(p.name)}</b></div><div class="muted"><button type="button" class="price-btn${pr == null ? ' none' : ''}" data-setprice="${p.id}" title="點一下改這位客人的價格">${pr == null ? '未填價格' : money(pr)}${sp && p.category !== 'gas' ? '（特價）' : ''} ✎</button>${p.stock_qty != null ? '・庫存 ' + p.stock_qty : ''}</div>
       <div class="stepper"><button data-minus="${p.id}">−</button><input data-qty="${p.id}" inputmode="numeric" value=""><button data-plus="${p.id}">＋</button></div></div>`;
   }
   async function loadShifts() {
@@ -1001,14 +1056,16 @@ async function officeNew(view) {
   function renderRight() {
     const c = st.customer;
     const items = Object.entries(st.qty);
+    const miss = c ? missing() : [];
     const sorted = [...drivers].sort((a, b) => onShift(b.id, st.slot) - onShift(a.id, st.slot));
     $('#right').innerHTML = `<h3 style="margin-top:0">新增訂單 ${c ? '<span class="muted">' + esc(c.name) + '</span>' : ''}</h3>
       <label>配送日</label><div class="row" style="flex-wrap:nowrap"><input type="date" id="dd" value="${st.date}" min="${t}">
         <button class="${st.date === t ? 'primary' : ''}" data-date="${t}">今天</button><button class="${st.date === addDays(t, 1) ? 'primary' : ''}" data-date="${addDays(t, 1)}">明天</button></div>
       <label>時段</label><div class="segment" id="slot">${[['', '不指定'], ...SLOTS.map(s => [s, SLOT[s]])].map(([k, v]) => `<button type="button" class="${st.slot === k ? 'on' : ''}" data-slot="${k}">${v}</button>`).join('')}</div>
-      <label>師傅</label><select id="drv"><option value="">先不派（放待派）</option>${sorted.map(d => `<option value="${d.id}" ${st.driver === d.id ? 'selected' : ''}>${esc(d.name)}${st.slot ? (onShift(d.id, st.slot) ? `（${SLOT[st.slot]}有班）` : '（這時段沒班）') : (onShift(d.id) ? '（有排班）' : '（沒排班）')}</option>`).join('')}</select>
+      ${miss.length ? `<div class="call-warn">⚠ ${miss.map(pid => esc((prodOf(pid) || {}).name || '')).join('、')} 還沒填這位客人的價格。可以先記單放待派，要填好價格才能派給師傅（點中間的「未填價格」）。</div>` : ''}
+      <label>師傅</label><select id="drv" ${miss.length ? 'disabled' : ''}><option value="">${miss.length ? '先填價格才能派' : '先不派（放待派）'}</option>${sorted.map(d => `<option value="${d.id}" ${st.driver === d.id ? 'selected' : ''}>${esc(d.name)}${st.slot ? (onShift(d.id, st.slot) ? `（${SLOT[st.slot]}有班）` : '（這時段沒班）') : (onShift(d.id) ? '（有排班）' : '（沒排班）')}</option>`).join('')}</select>
       <div class="items">${items.map(([pid, n]) => { const p = products.find(x => x.id === +pid); return `<div class="row between item"><span class="grow">${esc(p ? p.name : '#' + pid)}</span>
-        <span class="stepper sm"><button data-minus="${pid}">−</button><b>${n}</b><button data-plus="${pid}">＋</button></span><span class="money" style="width:80px;text-align:right">${money(n * priceOf(pid))}</span></div>`; }).join('')
+        <span class="stepper sm"><button data-minus="${pid}">−</button><b>${n}</b><button data-plus="${pid}">＋</button></span><span class="money" style="width:80px;text-align:right">${priceOf(pid) == null ? '<span class="price-none">未填價格</span>' : money(n * priceOf(pid))}</span></div>`; }).join('')
         || `<div class="muted empty">${c ? '從中間點品項加進來' : '先選客戶'}</div>`}</div>
       ${c && c.billing_type === 'monthly' ? '<div class="muted">月結客戶，不用收錢</div>' : `<label>收款方式</label><div class="segment" id="pay"><button type="button" class="${st.pay === 'cash' ? 'on' : ''}" data-m="cash">現金</button><button type="button" class="${st.pay === 'transfer' ? 'on' : ''}" data-m="transfer">轉帳</button></div>`}
       <label>備註（給師傅看）</label><input id="note" placeholder="例如：放後門、下午 3 點後" value="${esc(st.note || '')}">
@@ -1053,21 +1110,36 @@ async function officeNew(view) {
     const note = [st.customer.order_note, st.note].filter(Boolean).join('；');
     const body = { customer_id: st.customer.id, items, note: note || null, delivery_date: st.date, delivery_slot: st.slot || null };
     if (st.customer.billing_type !== 'monthly') body.pay_method = st.pay;
-    if (st.driver) body.driver_id = st.driver;
+    if (st.driver && !missing().length) body.driver_id = st.driver;
     if (st.callId) body.call_id = st.callId;
     const btn = $('#create'); btn.disabled = true;
     try {
       const o = await api('POST', '/api/orders', body);
-      const k = S.calls.find(x => x.id === st.callId); if (k) { k.state = 'done'; k.order_no = o.order_no; saveCalls(); }
+      onCreated(o);
       toast(`已建立 ${o.order_no}（${dayText(o.delivery_date)} ${slotText(o.delivery_slot)}）${o.driver_name ? '，派給 ' + o.driver_name : '，放在待派'}`, 'ok', o.driver_name ? lineAction(o) : null);
     } catch (e) {
       if (!e.network) { btn.disabled = false; return toast(e.message, 'bad'); }
       queue('POST', '/api/orders', body, '建立訂單');
-      const k = S.calls.find(x => x.id === st.callId); if (k) { k.state = 'done'; k.order_no = '離線排隊中'; saveCalls(); }
+      onCreated(null);
       toast('離線中，訂單會在連上後自動送出', 'ok');
     }
-    officeNew(view);
   }
+  return { renderMid, renderRight, sync };
+}
+
+// 客戶頁直接記單：跳出記單視窗，送出後回到原本畫面
+async function orderDialog(cust, done) {
+  const [products, drivers] = await Promise.all([data('/api/products'), data('/api/drivers')]);
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<div class="row between" style="margin-bottom:10px"><h2 style="margin:0">記單</h2><button type="button" class="ghost" id="odClose">✕ 關閉（Esc）</button></div>
+    <div class="order-dlg"><section class="card" id="mid"></section><section class="card" id="right"></section></div>`;
+  dlg.classList.add('wide');
+  const st = { customer: cust, qty: {}, results: [], date: today(), slot: '', driver: null, shifts: [], callId: null, pay: 'cash' };
+  const ot = orderTaker({ products, drivers, st, onCreated: () => { dlg.close(); done && done(); } });
+  $('#odClose').onclick = () => dlg.close();
+  dlg.addEventListener('close', () => { dlg.classList.remove('wide'); dlg.innerHTML = ''; }, { once: true });
+  dlg.showModal();
+  ot.renderMid();
 }
 
 // ---------------------------------------------------------------------
@@ -1121,8 +1193,7 @@ async function loadCapture(id) {
       ${prices.length ? `<div>💲 舊系統售價：${prices.map(([s, v]) => {
         const prod = r.products[s];
         if (!prod) return `<span class="pill">${esc(s)} ${money(v)}</span>`;
-        if (prod.sale_price === v) return `<span class="pill">${esc(s)} ${money(v)}（同原價）</span>`;
-        return `<label class="pill accent" style="cursor:pointer"><input type="checkbox" data-price="${prod.id}" data-v="${v}" checked> ${esc(s)} ${money(v)} 設成特價（原價 ${money(prod.sale_price)}）</label>`;
+        return `<label class="pill accent" style="cursor:pointer"><input type="checkbox" data-price="${prod.id}" data-v="${v}" checked> ${esc(s)} ${money(v)} 存成這位客人的價格</label>`;
       }).join(' ')}</div>` : ''}
     </div>
     <div class="row" style="margin-top:14px"><button class="primary" value="ok">存檔（Enter）</button><button value="cancel" formnovalidate>不存（Esc）</button>
@@ -1263,15 +1334,19 @@ async function customerList(view) {
   const list = await data('/api/customers?limit=1000');
   view.innerHTML = `<div class="row between"><h2>客戶 <span class="pill">${list.length}</span></h2><button class="primary" id="add">＋ 新客戶</button></div>
     <input id="q" placeholder="搜尋電話、名字、地址" style="margin-bottom:10px">
-    <div class="card table-wrap"><table><thead><tr><th>名字</th><th>電話</th><th>地址</th><th>結帳</th><th class="num">欠款</th></tr></thead><tbody id="tb"></tbody></table></div>`;
+    <div class="card table-wrap"><table><thead><tr><th>名字</th><th>電話</th><th>地址</th><th>結帳</th><th class="num">欠款</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
   const draw = () => {
     const v = $('#q').value.trim();
     $('#tb').innerHTML = list.filter(c => !v || [c.name, c.phone, c.other_phones, c.address, c.code].some(x => (x || '').includes(v))).slice(0, 300)
-      .map(c => `<tr class="click" data-id="${c.id}"><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc(c.address)}</td><td>${c.billing_type === 'monthly' ? '月結' : '現結'}</td><td class="num">${c.balance ? money(c.balance) : ''}</td></tr>`).join('');
+      .map(c => `<tr class="click" data-id="${c.id}"><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc(c.address)}</td><td>${c.billing_type === 'monthly' ? '月結' : '現結'}</td><td class="num">${c.balance ? money(c.balance) : ''}</td><td><button class="ghost" data-order="${c.id}">＋ 記單</button></td></tr>`).join('');
   };
   draw();
   $('#q').oninput = () => { S.live = !$('#q').value; draw(); };
-  $('#tb').onclick = e => { const tr = e.target.closest('tr'); if (tr) location.hash = '#/customers/' + tr.dataset.id; };
+  $('#tb').onclick = e => {
+    const ob = e.target.closest('[data-order]');
+    if (ob) { const c = list.find(x => x.id === +ob.dataset.order); return orderDialog(c, () => toast('回到客戶清單')); }
+    const tr = e.target.closest('tr'); if (tr) location.hash = '#/customers/' + tr.dataset.id;
+  };
   $('#add').onclick = () => customerDialog({}, c => location.hash = '#/customers/' + c.id);
 }
 
@@ -1285,7 +1360,8 @@ function customerFormHTML(c, drivers) {
       : `<div><label>${t}</label><input name="${k}" type="${type || 'text'}" value="${esc(c[k] ?? '')}"></div>`).join('')}
     <div><label>結帳方式 <span class="muted">（沒勾＝現結）</span></label><label class="check-box"><input type="checkbox" name="monthly_box" ${c.billing_type === 'monthly' ? 'checked' : ''}>月結客戶</label></div>
     <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
-    <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div></div>
+    <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div>
+    <div><label>調漲日期</label><div class="row" style="flex-wrap:nowrap"><input type="date" name="price_raised_on" value="${esc(c.price_raised_on ?? '')}"><button type="button" class="ghost phone-card" onclick="this.previousElementSibling.value = today()">📅 填今天</button></div></div></div>
     <label>備註 <span class="muted">（店裡自己看）</span></label><textarea name="note">${esc(c.note || '')}</textarea>
     <label>訂單常態備註 <span class="muted">（每張單自動帶給師傅，例如：不要給好桶、按對講機 2 樓）</span></label><input name="order_note" value="${esc(c.order_note || '')}">`;
 }
@@ -1295,6 +1371,7 @@ function readCustomerForm(form) {
   f.tax_id = f.tax_id.trim() || null; f.invoice_title = f.invoice_title.trim() || null;
   f.needs_invoice = !!(f.tax_id || f.invoice_title);
   f.billing_type = form.monthly_box.checked ? 'monthly' : 'cash'; delete f.monthly_box;
+  f.price_raised_on = f.price_raised_on || null;
   return f;
 }
 async function customerDialog(c, done) {
@@ -1354,8 +1431,11 @@ async function phonesDialog(id, onChange) {
 }
 async function customerDetail(view, id) {
   S.live = false;
-  const [c, drivers] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers')]);
+  const [c, drivers, products] = await Promise.all([api('GET', '/api/customers/' + id), data('/api/drivers'), data('/api/products')]);
   const tab = store.get('custTab', 'info');
+  const gasList = products.filter(p => p.category === 'gas');
+  const priceMap = Object.fromEntries((c.prices || []).map(x => [x.product_id, x.price]));
+  const noPrice = gasList.filter(p => priceMap[p.id] == null).length;
   view.innerHTML = `<p><a href="#/customers">← 客戶清單</a></p>
     <div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span>
       ${c.needs_invoice ? '<span class="pill blue">要發票</span>' : ''}${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}
@@ -1364,6 +1444,7 @@ async function customerDetail(view, id) {
     <div class="hub small" id="ctabs">
       ${[['info', '📇', '基本資料', `電話 ${1 + (c.phones || []).length} 支・${esc(c.address)}`],
          ['orders', '🧾', '訂單', `最近 ${c.recent_orders.length} 張・共買 ${money(c.total_sales)}`],
+         ['prices', '💲', '價格', noPrice ? `<span class="price-none">${noPrice} 種瓦斯還沒填價格</span>` : gasList.map(p => esc(p.name) + ' ' + money(priceMap[p.id])).join('・') + (c.price_raised_on ? `・調漲 ${esc(c.price_raised_on)}` : '')],
          ['pays', '💵', '付款紀錄', `共付 ${money(c.total_paid)}`],
          ['note', '📝', '備註', c.order_note ? '常態備註：' + esc(c.order_note) : '還沒設常態備註']]
         .map(([k, ic, t, d]) => `<a class="hubcard${k === tab ? ' hl' : ''}" data-tab="${k}"><div class="ic">${ic}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
@@ -1371,6 +1452,8 @@ async function customerDetail(view, id) {
   const sec = $('#csec');
   const show = async k => {
     store.set('custTab', k);
+    sec.onchange = sec.onkeydown = null;
+    sec.onclick = e => { const tr = e.target.closest('[data-o]'); if (tr) location.hash = '#/order/' + tr.dataset.o; };
     $$('#ctabs .hubcard').forEach(a => a.classList.toggle('hl', a.dataset.tab === k));
     if (k === 'info' || k === 'note') {
       sec.innerHTML = `<form id="f">${customerFormHTML(c, drivers)}<p class="row"><button class="primary">儲存</button>
@@ -1387,6 +1470,36 @@ async function customerDetail(view, id) {
       sec.innerHTML = `<div class="table-wrap"><table><tr><th>單號</th><th>狀態</th><th>配送／送達</th><th class="num">金額</th></tr>
         ${c.recent_orders.map(o => `<tr class="click" data-o="${o.id}"><td>${esc(o.order_no)}</td><td>${STATUS[o.status]}</td><td>${esc(o.delivered_at || o.ordered_at)}</td><td class="num">${money(o.total_amount)}</td></tr>`).join('') || '<tr><td class="muted">沒有</td></tr>'}</table></div>
         <p><a href="#/orders">到訂單查詢看更多 ›</a></p>`;
+    } else if (k === 'prices') {
+      const others = products.filter(p => p.category !== 'gas' && p.category !== 'empty_cylinder' && priceMap[p.id] != null);
+      sec.innerHTML = `<p class="muted" style="margin-top:0">這位客人自己的價格，改完數字按 Enter 或點別的地方就會存。瓦斯沒填價格的話，可以先記單，但不能派給師傅。</p>
+        <div class="table-wrap"><table><tr><th>商品</th><th class="num">價格</th><th></th></tr>
+        ${[...gasList, ...others].map(p => `<tr><td>${esc(p.name)}${p.category === 'gas' ? '' : ' <span class="muted">（特價）</span>'}</td>
+          <td class="num"><input type="number" min="1" data-price="${p.id}" value="${priceMap[p.id] ?? ''}" placeholder="未填" style="width:120px;text-align:right"></td>
+          <td>${priceMap[p.id] == null ? '<span class="price-none">未填</span>' : ''}${p.category === 'gas' ? '' : ` <button class="ghost" data-unprice="${p.id}">改回原價</button>`}</td></tr>`).join('') || '<tr><td class="muted" colspan="3">還沒有瓦斯商品，請到「商品庫存 → 商品」新增</td></tr>'}</table></div>
+        <div class="row" style="margin-top:12px"><label style="margin:0">調漲日期</label><input type="date" id="raise" value="${esc(c.price_raised_on ?? '')}" style="width:auto"><button class="ghost phone-card" id="raiseToday">📅 填今天</button></div>`;
+      const saveRaise = async v => { try { await api('PUT', '/api/customers/' + id, { price_raised_on: v || null }); c.price_raised_on = v || null; toast(v ? '調漲日期 ' + v : '已清掉調漲日期', 'ok'); } catch (err) { toast(err.message, 'bad'); } };
+      $('#raise').onchange = e => saveRaise(e.target.value);
+      $('#raiseToday').onclick = () => { $('#raise').value = today(); saveRaise(today()); };
+      sec.onchange = async e => {
+        const pid = e.target.dataset.price; if (!pid) return;
+        const v = e.target.value.trim(), n = parseInt(v);
+        if (v && !(n > 0)) return toast('價格要填大於 0 的數字', 'bad');
+        if (!v) return;
+        try {
+          const r = await api('PUT', `/api/customers/${id}/prices`, { product_id: +pid, price: n });
+          priceMap[pid] = n; c.prices = [...(c.prices || []).filter(x => x.product_id !== +pid), { product_id: +pid, price: n }];
+          toast(`已存 ${money(n)}${r && r.fixed_items ? `，還沒送的單也一起補上價格` : ''}`, 'ok');
+          const tag = e.target.closest('tr').querySelector('.price-none'); if (tag) tag.remove();
+        } catch (err) { toast(err.message, 'bad'); }
+      };
+      sec.onkeydown = e => { if (e.key === 'Enter' && e.target.dataset.price) e.target.blur(); };
+      sec.onclick = async e => {
+        const u = e.target.closest('[data-unprice]'); if (!u) return;
+        await api('PUT', `/api/customers/${id}/prices`, { product_id: +u.dataset.unprice, price: null }).catch(err => toast(err.message, 'bad'));
+        reload();
+      };
+      return;
     } else if (k === 'pays') {
       sec.innerHTML = '<div class="muted">載入中…</div>';
       const pays = await api('GET', '/api/payments?customer_id=' + id).catch(() => []);
@@ -1397,7 +1510,7 @@ async function customerDetail(view, id) {
   const reload = () => customerDetail(view, id);
   show(tab);
   $('#ctabs').onclick = e => { const a = e.target.closest('[data-tab]'); if (a) show(a.dataset.tab); };
-  $('#order').onclick = () => { S.takeCall = { customer_id: c.id, phone: c.phone || '' }; location.hash = '#/home'; };
+  $('#order').onclick = () => orderDialog(c, reload);
   $('#pay').onclick = async () => {
     const v = prompt(`${c.name} 這次付多少錢？`, c.balance > 0 ? c.balance : '');
     if (!v) return;
@@ -1416,7 +1529,7 @@ async function productList(view) {
     <p class="muted">鋼瓶規格（4kg、16kg、20kg、50kg…）在這裡自己新增。瓦斯要搭配一個「空瓶」商品，回收空瓶時庫存才會自動算。</p>
     <div class="card table-wrap"><table><tr><th>名稱</th><th>型號</th><th>分類</th><th class="num">售價</th><th class="num">進價</th><th class="num">庫存</th><th></th></tr>
     ${list.map(p => `<tr class="click" data-id="${p.id}" style="${p.active ? '' : 'opacity:.5'}"><td>${esc(p.name)}</td><td>${esc(p.sku || '')}</td><td>${CAT[p.category]}</td>
-      <td class="num">${money(p.sale_price)}</td><td class="num">${money(p.cost_price)}</td>
+      <td class="num">${p.category === 'gas' ? '<span class="muted">依客戶</span>' : money(p.sale_price)}</td><td class="num">${money(p.cost_price)}</td>
       <td class="num">${p.track_stock ? (p.stock_qty ?? 0) : '—'}${p.low_stock_alert != null && p.stock_qty < p.low_stock_alert ? ' <span class="pill bad">低</span>' : ''}</td><td>${p.active ? '' : '停用'}</td></tr>`).join('')}</table></div>`;
   $('#add').onclick = () => productDialog({ category: 'gas', track_stock: 1, active: 1 }, list);
   view.onclick = e => { const tr = e.target.closest('tr[data-id]'); if (tr) productDialog(list.find(p => p.id === +tr.dataset.id), list); };
@@ -1430,7 +1543,8 @@ function productDialog(p, list) {
     <div><label>型號 / 料號</label><input name="sku" value="${esc(p.sku || '')}"></div>
     <div><label>分類</label><select name="category">${Object.entries(CAT).map(([k, v]) => `<option value="${k}" ${p.category === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     <div><label>單位</label><input name="unit" value="${esc(p.unit || '個')}"></div>
-    <div><label>售價</label><input name="sale_price" type="number" value="${p.sale_price ?? 0}"></div>
+    <div id="saleCell"><label>售價</label><input name="sale_price" type="number" value="${p.sale_price ?? 0}"></div>
+    <div id="gasNote" class="muted" style="align-self:end">瓦斯不用填售價：每位客人的價格在「客戶 → 價格」設定，沒填價格不能派單。</div>
     <div><label>進價</label><input name="cost_price" type="number" value="${p.cost_price ?? 0}"></div>
     <div><label>對應空瓶（瓦斯才要選）</label><select name="empty_product_id"><option value="">無</option>${empties.map(e => `<option value="${e.id}" ${p.empty_product_id === e.id ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></div>
     <div><label>低於幾個要提醒</label><input name="low_stock_alert" type="number" value="${p.low_stock_alert ?? ''}"></div></div>
@@ -1439,6 +1553,8 @@ function productDialog(p, list) {
     ${p.id && p.track_stock ? `<p class="row"><input id="adj" type="number" placeholder="盤點調整（+進、−出）" style="width:200px"><button type="button" id="adjBtn">調整庫存</button></p>` : ''}
     <div class="row"><button class="primary">儲存</button><button type="button" id="close">取消</button></div></form>`;
   const form = $('form', dlg);
+  const gasToggle = () => { const g = form.category.value === 'gas'; $('#saleCell').hidden = g; $('#gasNote').hidden = !g; };
+  form.category.onchange = gasToggle; gasToggle();
   $('#close').onclick = () => { dlg.close(); S.live = true; };
   const adj = $('#adjBtn');
   if (adj) adj.onclick = async () => { try { await api('POST', '/api/stock/adjust', { product_id: p.id, qty_change: parseInt($('#adj').value), note: '盤點調整' }); toast('已調整', 'ok'); dlg.close(); S.live = true; route(); } catch (e) { toast(e.message, 'bad'); } };
