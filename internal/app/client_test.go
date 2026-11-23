@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -143,5 +145,67 @@ func TestClientOldMain(t *testing.T) {
 	cl.Pick(context.Background())
 	if cl.Via() != "public" {
 		t.Fatalf("舊版主電腦也要能連，結果 %q %v", cl.Via(), cl.status())
+	}
+}
+
+// 店裡新電腦：什麼都沒填，廣播找到主電腦，記下身分碼和主電腦的外面網址。
+func TestClientDiscoversMain(t *testing.T) {
+	a, c := setup(t)
+	port := c.srv.Listener.Addr().(*net.TCPAddr).Port
+	a.Port = port
+	a.Tunnel = &Tunnel{url: "https://shop1.example.com"}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.ServeDiscovery(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	st := &Station{Mode: "client"}
+	cl := &Client{St: st, File: filepath.Join(t.TempDir(), "station.json"), lanTimeout: time.Second, publicTimeout: time.Second,
+		discoverTargets: []string{fmt.Sprintf("127.0.0.1:%d", discoveryPort(port))}}
+	cl.Pick(context.Background())
+	if cl.Via() != "lan" {
+		t.Fatalf("應該廣播找到主電腦，結果 %q %v", cl.Via(), cl.status())
+	}
+	saved := LoadStation(cl.File)
+	if saved.ServerID != a.serverID() || saved.Server != "https://shop1.example.com" {
+		t.Fatalf("沒記下主電腦：%+v", saved)
+	}
+}
+
+// 連線碼：主電腦產生，分機看得懂；也接受直接打網址。
+func TestConnCode(t *testing.T) {
+	code := makeCode("https://shop1.example.com", "abc123")
+	u, id, err := parseCode(code)
+	if err != nil || u != "https://shop1.example.com" || id != "abc123" {
+		t.Fatalf("連線碼解不回來：%q %q %v", u, id, err)
+	}
+	if u, _, _ := parseCode("shop2.example.com/"); u != "https://shop2.example.com" {
+		t.Fatalf("網址：%q", u)
+	}
+	if _, _, err := parseCode("GAS-亂打"); err == nil {
+		t.Fatal("亂打的連線碼應該報錯")
+	}
+	st := &Station{Mode: "client"}
+	in := code
+	if _, err := st.apply(stationInput{Server: &in}); err != nil || st.Server != "https://shop1.example.com" || st.ServerID != "abc123" {
+		t.Fatalf("套用連線碼：%+v %v", st, err)
+	}
+}
+
+// 全新安裝（設定精靈）選分機：不用重開，馬上開始找主電腦。
+func TestSetupChooseClient(t *testing.T) {
+	st := &Station{Mode: "setup"}
+	restarted := false
+	cl := &Client{St: st, File: filepath.Join(t.TempDir(), "station.json"), Restart: func() { restarted = true },
+		lanTimeout: 200 * time.Millisecond, publicTimeout: 200 * time.Millisecond, discoverTargets: []string{}}
+	front := httptest.NewServer(cl.Handler())
+	defer front.Close()
+	fc := &client{t: t, srv: front}
+	m := fc.ok("PUT", "/api/local/station", map[string]any{"mode": "client"})
+	if m["restart"] != false || restarted {
+		t.Fatalf("選分機不該重開：%v", m)
+	}
+	if LoadStation(cl.File).Mode != "client" {
+		t.Fatal("沒存成分機")
 	}
 }

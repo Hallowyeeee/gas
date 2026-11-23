@@ -7,11 +7,12 @@ import (
 	"os/exec"
 )
 
-// openFirewall 加一條防火牆規則：只讓同一個網路（店裡）的電腦連 gas 的埠號。
+// openFirewall 加防火牆規則：只讓同一個網路（店裡）的電腦連 gas 的網頁埠號（TCP）和自動找主電腦的埠號（UDP）。
 // 會跳出 Windows「是否允許變更」的視窗，要按「是」。
 func openFirewall(port int) error {
 	args := fmt.Sprintf(`/c netsh advfirewall firewall delete rule name=GasShop & `+
-		`netsh advfirewall firewall add rule name=GasShop dir=in action=allow protocol=TCP localport=%d remoteip=localsubnet profile=any`, port)
+		`netsh advfirewall firewall add rule name=GasShop dir=in action=allow protocol=TCP localport=%d remoteip=localsubnet profile=any & `+
+		`netsh advfirewall firewall add rule name=GasShop dir=in action=allow protocol=UDP localport=%d remoteip=localsubnet profile=any`, port, discoveryPort(port))
 	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
 		"Start-Process cmd -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList "+psQuote(args))
 	hideWindow(cmd)

@@ -40,9 +40,6 @@ func main() {
 	if *setStation == "main" || *setStation == "client" {
 		if st.Mode != *setStation {
 			st.Mode = *setStation
-			if st.Mode == "client" && st.Server == "" {
-				st.Server = app.DefaultServer
-			}
 			st.Save(stFile)
 		}
 		return
@@ -56,7 +53,15 @@ func main() {
 	app.Version = version
 	local := fmt.Sprintf("http://localhost:%d", *port)
 
-	if st.Mode == "client" {
+	if st.Mode == "" {
+		// 沒選過：已經有資料庫的是舊主電腦；全新安裝就先開「設定精靈」問主電腦還是分機
+		if _, err := os.Stat(*dbPath); err == nil {
+			st.Mode = "main"
+		} else {
+			st.Mode = "setup"
+		}
+	}
+	if st.Mode != "main" {
 		runClient(st, stFile, *port, local, baseDir, exe, *noBrowser, *useBrowser, *startHidden)
 		return
 	}
@@ -87,6 +92,7 @@ func main() {
 	a.ShowWindow = ui.Show
 	a.OpenURL = openBrowser
 	go a.Backup.Run(ctx)
+	go a.ServeDiscovery(ctx)
 	go a.RunReminders(ctx)
 	if !*noTunnel {
 		a.Tunnel = &app.Tunnel{Port: *port, Dir: baseDir, Download: true}
@@ -121,7 +127,7 @@ func runClient(st *app.Station, stFile string, port int, local, baseDir, exe str
 		}
 		fatal(fmt.Sprintf("埠號 %d 被其他程式占用，無法啟動。", port), err)
 	}
-	log.Println("瓦斯行管理系統（分機）啟動，版本", version, "，主電腦網址", st.Server)
+	log.Println("瓦斯行管理系統（", st.Mode, "）啟動，版本", version, "，主電腦網址", st.Server)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -130,7 +136,7 @@ func runClient(st *app.Station, stFile string, port int, local, baseDir, exe str
 	ui.client = true
 	restart := false
 	doRestart := func() { restart = true; ui.Quit(); stop() }
-	c := &app.Client{St: st, File: stFile, Static: web.Static(), Show: ui.Show, OpenURL: openBrowser, Restart: doRestart}
+	c := &app.Client{St: st, File: stFile, Port: port, Static: web.Static(), Show: ui.Show, OpenURL: openBrowser, Restart: doRestart}
 	c.Pick(ctx) // 先找一次，視窗一打開就連得上
 	go c.Run(ctx)
 	upd := &app.App{ExePath: exe, Restart: doRestart}

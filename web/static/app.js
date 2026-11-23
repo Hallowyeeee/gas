@@ -301,6 +301,71 @@ function callRowHTML(k, active) {
 // ---------------------------------------------------------------------
 // 這台電腦：主電腦 / 分機、來電要不要跳
 // ---------------------------------------------------------------------
+// 全新安裝第一次打開：選主電腦或分機；分機還沒連上過主電腦：自動找＋輸入連線碼
+function stationGate() {
+  const st = S.station;
+  if (!st) return false;
+  if (st.mode === 'setup') { setupWizard(); return true; }
+  if (st.mode === 'client' && !st.via && !st.server_id) { connectPage(); return true; }
+  return false;
+}
+function gatePage(inner) {
+  lastShell = '';
+  document.body.className = '';
+  document.body.innerHTML = `<main class="center"><h2><img src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:12px;vertical-align:middle;margin-right:8px">瓦斯行管理系統</h2>
+    <div class="card" id="box">${inner}</div></main><div id="toast"></div>`;
+  return $('#box');
+}
+async function putStation(body) {
+  const r = await fetch('/api/local/station', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || '儲存失敗');
+  return d;
+}
+function setupWizard() {
+  const box = gatePage(`<h3 style="margin-top:0">第一次使用：這台電腦是？</h3>
+    <p><button class="primary lg" id="pickClient" style="width:100%">分機</button></p>
+    <p class="muted" style="margin-top:-6px">店裡已經有主電腦了，這台是其他櫃台、辦公室或家裡的電腦。資料都放主電腦，這台不放。</p>
+    <p><button class="lg" id="pickMain" style="width:100%">主電腦</button></p>
+    <p class="muted" style="margin-top:-6px">這家店的第一台。資料放這台、接來電盒，要一直開著，分機和師傅手機才能用。</p>`);
+  $('#pickClient', box).onclick = async () => {
+    try { await putStation({ mode: 'client' }); await loadStation(); route(); } catch (e) { toast(e.message, 'bad'); }
+  };
+  $('#pickMain', box).onclick = async () => {
+    if (!confirm('確定這台是主電腦？\n接著 Windows 會問「是否允許」（讓店裡分機連進來），請按「是」。')) return;
+    try { await putStation({ mode: 'main' }); box.innerHTML = '<p>設定好了，程式會自動重新打開，請稍等…</p>'; } catch (e) { toast(e.message, 'bad'); }
+  };
+}
+let connectTimer;
+function connectPage() {
+  clearTimeout(connectTimer);
+  const st = S.station;
+  const box = gatePage(`<h3 style="margin-top:0">連到店裡的主電腦</h3>
+    <p>🔎 正在店裡的網路找主電腦… <span class="muted">（在店裡的話，找到就會自動進入，什麼都不用填）</span></p>
+    ${st.error ? `<p class="muted">${esc(st.error)}</p>` : ''}
+    <label>在外面？請輸入主電腦的連線碼</label>
+    <input id="code" placeholder="GAS- 開頭的一串字" autocomplete="off">
+    <p class="muted">連線碼在主電腦的「設定 → 這台電腦」，按「複製連線碼」後用 LINE 傳過來貼上就好。</p>
+    <p class="row"><button class="primary lg" id="go">連線</button><button class="ghost" id="back">改選主電腦</button></p>`);
+  $('#go', box).onclick = async () => {
+    const v = $('#code').value.trim(); if (!v) return toast('請先貼上連線碼', 'bad');
+    $('#go').disabled = true; toast('連線中…');
+    try { const d = await putStation({ server: v }); S.station = d.status; if (S.station.via) { toast('連上了', 'ok'); route(); } else toast(S.station.error || '連不到主電腦，請確認主電腦開著', 'bad'); }
+    catch (e) { toast(e.message, 'bad'); } finally { const b = $('#go'); if (b) b.disabled = false; }
+  };
+  $('#back', box).onclick = async () => {
+    if (!confirm('確定這台要當主電腦？店裡已經有主電腦的話不要選。')) return;
+    try { await putStation({ mode: 'main' }); box.innerHTML = '<p>設定好了，程式會自動重新打開，請稍等…</p>'; } catch (e) { toast(e.message, 'bad'); }
+  };
+  const poll = async () => {
+    const typing = $('#code') && $('#code').value.trim();
+    await loadStation();
+    if (S.station && S.station.mode === 'client' && !S.station.via && !S.station.server_id) { if (typing || document.activeElement?.id === 'code') connectTimer = setTimeout(poll, 3000); else connectPage(); return; }
+    route();
+  };
+  connectTimer = setTimeout(poll, 3000);
+}
+
 async function stationSettingsCard(sys, admin) {
   const st = await loadStation();
   if (!st) return '';
@@ -314,7 +379,8 @@ async function stationSettingsCard(sys, admin) {
       <div class="muted" style="margin-top:4px">資料都在主電腦，這台只是打開來用。分機版本 ${esc(st.version)}，半夜會自動更新。</div>
       ${popup}
       <details><summary>連線設定（通常不用改）</summary>
-        <label>主電腦外面的網址</label><input id="stServer" value="${esc(st.server || '')}" placeholder="https://gas.hallowyeeee.com">
+        <div class="muted">目前外面網址：${esc(st.server || '還沒有（在店裡連上一次就會自動記住）')}</div>
+        <label>主電腦換了，或外面一直連不上：貼上新的連線碼</label><input id="stServer" placeholder="GAS- 開頭的一串字" autocomplete="off">
         <label>主電腦在店裡的位址（自動找不到時才填，例如 192.168.1.10）</label><input id="stIP" value="${esc(st.manual_ip || '')}" placeholder="留空 = 自動找">
         <p class="row"><button id="stSave" class="primary">儲存並重新連線</button></p>
         <p class="row"><button id="stToMain" class="danger">改成主電腦</button></p>
@@ -323,6 +389,11 @@ async function stationSettingsCard(sys, admin) {
   return `<div class="card" id="station"><h3 style="margin-top:0">🖥 這台電腦：主電腦</h3>
     <div class="muted">資料庫在這台。店裡其他電腦裝好程式選「分機」就會自動連過來；在外面的分機走 ${esc(sys.tunnel_url || '固定網址')}。這台要一直開著，分機和師傅手機才能用。</div>
     ${(st.lan || []).length ? `<div style="margin-top:6px">店內位址：${st.lan.map(u => esc(u.replace('http://', ''))).join('、')}</div>` : ''}
+    <h4 style="margin:12px 0 4px">外面的電腦怎麼連</h4>
+    ${st.code ? `<div class="muted">店裡的電腦選「分機」會自己找到這台，不用連線碼。外面（例如家裡）的電腦第一次打開時，貼上這組連線碼：</div>
+      <div class="row" style="margin-top:6px"><input readonly value="${esc(st.code)}" style="font-family:monospace;flex:1" onclick="this.select()"><button id="stCopy" class="primary">複製連線碼</button></div>
+      <div class="muted">外面網址：${esc(st.public)}${/trycloudflare\.com/.test(st.public) ? '　⚠ 這是臨時網址，主電腦重開就會變，外面的電腦要重新貼。請到下面「手機網址」設定固定網址。' : ''}</div>`
+      : `<div class="muted">⚠ 這台還沒有外面網址，外面的電腦和師傅手機連不進來。請到下面「手機網址」設定固定網址（Cloudflare）。</div>`}
     ${popup}
     ${admin ? `<p class="row"><button id="stFirewall">讓店裡電腦連進來（打開防火牆）</button></p>
       <div class="muted">分機在店裡卻顯示「走外面網路」才需要按。按了會跳出 Windows 視窗問「是否允許」，按「是」。</div>
@@ -343,6 +414,7 @@ function bindStationSettings(view) {
   };
   $('#stPopup', card).onchange = e => { S.station && (S.station.popup = e.target.checked); put({ popup: e.target.checked }, e.target.checked ? '這台電腦來電會跳出客人資料' : '這台電腦來電不跳了（還是會排進來電清單）'); };
   const save = $('#stSave', card); if (save) save.onclick = () => put({ server: $('#stServer').value, manual_ip: $('#stIP').value }, '已儲存，重新連線');
+  const copy = $('#stCopy', card); if (copy) copy.onclick = async () => { toast(await copyText(S.station.code) ? '連線碼已複製，用 LINE 傳給外面的電腦貼上' : '請手動選取連線碼複製', 'ok'); };
   const toMain = $('#stToMain', card); if (toMain) toMain.onclick = () => { if (confirm('確定把這台改成主電腦？這台會開始用自己的資料庫，和現在主電腦的資料分開。')) put({ mode: 'main' }); };
   const toClient = $('#stToClient', card); if (toClient) toClient.onclick = () => { if (confirm('確定把這台改成分機？這台的資料庫會停用，之後資料都看主電腦。')) put({ mode: 'client' }); };
   const fw = $('#stFirewall', card); if (fw) fw.onclick = async () => {
@@ -462,6 +534,7 @@ function shell(nav) {
 
 let lastShell = '';
 async function route(soft) {
+  if (stationGate()) return;
   if (!S.me) return showLogin();
   const driver = S.me.role === 'driver';
   const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '抄錶']] : [])] : OFFICE_NAV;
@@ -1719,7 +1792,7 @@ async function settings(view) {
       <p class="muted">師傅用手機相機掃 QR Code 打開，登入後按「分享 → 加入主畫面」。${cfg.tunnel_token_set ? '這是固定網址，不會變。' : '免費通道每次程式重開會換網址，要重新掃。'}</p>
       ${sys.lan_urls.length ? `<p class="muted">店裡 WiFi：${sys.lan_urls.map(esc).join('、')}</p>` : ''}
       ${admin ? `<details ${cfg.tunnel_token_set ? '' : 'open'}><summary>固定網址設定（Cloudflare）</summary>
-        <label>網址</label><input id="thost" value="${esc(cfg.tunnel_host || 'gas.hallowyeeee.com')}">
+        <label>網址</label><input id="thost" value="${esc(cfg.tunnel_host || '')}" placeholder="例如 店名.hallowyeeee.com">
         <label>通道金鑰${cfg.tunnel_token_set ? '（已設定；要換才貼新的）' : ''}</label>
         <input id="ttok" autocomplete="off" placeholder="貼上 Cloudflare 給的整段指令，或 eyJ 開頭那一長串">
         <p class="row"><button id="saveTun" class="primary">儲存並連線</button>${cfg.tunnel_token_set ? '<button id="clrTun" class="danger">改回免費臨時網址</button>' : ''}</p></details>` : ''}</div>
@@ -2230,7 +2303,8 @@ document.addEventListener('keydown', e => { if (e.key === 'F2' && S.me && S.me.r
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => { });
 (async () => {
   S.me = store.get('me', null);
-  loadStation();
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) await loadStation(); // 店裡電腦的程式視窗：先看是主電腦還是分機（本機，很快）
+  else loadStation();
   if (S.me) route(); // 先用上次的登入資料馬上顯示
   try { S.me = await api('GET', '/api/me'); store.set('me', S.me); }
   catch (e) { if (!e.network) { S.me = null; store.del('me'); } }

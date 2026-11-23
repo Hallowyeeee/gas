@@ -20,6 +20,7 @@ import (
 type Client struct {
 	St      *Station
 	File    string // station.json
+	Port    int    // 網頁埠號（主電腦也一樣）
 	Static  fs.FS
 	Show    func()
 	OpenURL func(string)
@@ -33,12 +34,14 @@ type Client struct {
 	kick    chan struct{}
 
 	lanTimeout, publicTimeout time.Duration
+	discoverTargets           []string // 測試用；空的 = 店裡網路廣播
 	transport                 http.RoundTripper
 }
 
 type stationInfo struct {
 	ID      string   `json:"id"`
 	LAN     []string `json:"lan"`
+	Public  string   `json:"public"`
 	Version string   `json:"version"`
 }
 
@@ -177,16 +180,29 @@ func (c *Client) tryLAN(ctx context.Context, cands []string, wantID string) (str
 	return cands[best], bestInfo
 }
 
-// Pick 找一條連得到主電腦的路。
+// Pick 找一條連得到主電腦的路：
+// 1. 記得的店內位址 → 2. 店裡網路廣播找 → 3. 外面網址（連線碼給的，或在店裡時主電腦告訴我們的）。
 func (c *Client) Pick(ctx context.Context) {
 	c.init()
 	c.mu.Lock()
-	wantID, server := c.St.ServerID, c.St.Server
+	wantID, server, mode := c.St.ServerID, c.St.Server, c.St.Mode
 	c.mu.Unlock()
+	if mode != "client" {
+		return // 還在設定精靈，還沒選分機
+	}
 
 	if base, info := c.tryLAN(ctx, c.lanCandidates(), wantID); base != "" {
-		c.learn(info, base)
+		c.learn(info, true)
 		c.set(base, "lan", "")
+		return
+	}
+	if base, info := c.discoverLAN(ctx, wantID); base != "" {
+		c.learn(info, true)
+		c.set(base, "lan", "")
+		return
+	}
+	if server == "" {
+		c.set("", "", "店裡網路找不到主電腦。在外面的話，請輸入主電腦的連線碼")
 		return
 	}
 	info, err := c.fetchInfo(ctx, server, c.publicTimeout)
@@ -196,30 +212,60 @@ func (c *Client) Pick(ctx context.Context) {
 		return
 	}
 	if err != nil {
-		c.set("", "", "連不到主電腦："+shortErr(err))
+		c.set("", "", "連不到主電腦（主電腦要開著、有網路）："+shortErr(err))
 		return
 	}
 	if wantID != "" && info.ID != wantID {
 		log.Println("主電腦身分碼變了，改用新的：", info.ID)
 	}
-	c.learn(info, "")
-	// 主電腦剛告訴我們新的店內位址，再試一次直連
+	c.learn(info, false)
+	// 主電腦剛告訴我們店內位址，再試一次直連
 	if base, info2 := c.tryLAN(ctx, info.LAN, info.ID); base != "" {
-		c.learn(info2, base)
+		c.learn(info2, true)
 		c.set(base, "lan", "")
 		return
 	}
 	c.set(server, "public", "")
 }
 
+// discoverLAN 在店裡網路廣播找主電腦；記得身分碼的話只認同一台。
+func (c *Client) discoverLAN(ctx context.Context, wantID string) (string, *stationInfo) {
+	targets := c.discoverTargets
+	if targets == nil {
+		targets = broadcastTargets(discoveryPort(c.webPort()))
+	}
+	var cands []string
+	for _, f := range discover(ctx, targets, c.lanTimeout) {
+		if wantID == "" || f.ID == wantID {
+			cands = append(cands, f.Base)
+		}
+	}
+	if len(cands) == 0 {
+		return "", nil
+	}
+	return c.tryLAN(ctx, cands, wantID)
+}
+
+func (c *Client) webPort() int {
+	if c.Port != 0 {
+		return c.Port
+	}
+	return 8080
+}
+
 // learn 記下主電腦的身分碼和店內位址，下次開機直接用。
-func (c *Client) learn(info *stationInfo, _ string) {
+// 在店裡連到的（inShop）才相信它說的外面網址：主電腦換網址時，分機在店裡連一次就跟上。
+func (c *Client) learn(info *stationInfo, inShop bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	changed := c.St.ServerID != info.ID
 	c.St.ServerID = info.ID
 	if len(info.LAN) > 0 && strings.Join(info.LAN, ",") != strings.Join(c.St.LAN, ",") {
 		c.St.LAN = append([]string(nil), info.LAN...)
+		changed = true
+	}
+	if inShop && info.Public != "" && info.Public != c.St.Server {
+		c.St.Server = info.Public
 		changed = true
 	}
 	if changed && c.File != "" {
@@ -304,7 +350,9 @@ func (c *Client) putStation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.mu.Lock()
+	was := c.St.Mode
 	changed, err := c.St.apply(in)
+	now := c.St.Mode
 	if err == nil && c.File != "" {
 		err = c.St.Save(c.File)
 	}
@@ -313,10 +361,22 @@ func (c *Client) putStation(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, err)
 		return
 	}
-	if changed && c.Restart != nil {
+	switch {
+	case changed && now == "main" && c.Restart != nil:
+		// 變成主電腦：先打開防火牆讓店裡分機連得進來（Windows 會問一次），再重開成主電腦
+		go func() {
+			if err := openFirewall(c.webPort()); err != nil {
+				log.Println("打開防火牆：", err)
+			}
+			c.Restart()
+		}()
+	case changed && was != "setup" && c.Restart != nil:
 		go c.Restart()
-	} else if in.Server != nil || in.ManualIP != nil {
-		c.Pick(r.Context())
+	default:
+		changed = false
+		if now == "client" {
+			c.Pick(r.Context())
+		}
 	}
 	writeJSON(w, 200, map[string]any{"ok": true, "restart": changed, "status": c.status()})
 }
