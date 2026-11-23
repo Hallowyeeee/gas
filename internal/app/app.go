@@ -146,6 +146,10 @@ func migrate(db *sql.DB) error {
 	if err := ensureMeter(db); err != nil {
 		return fmt.Errorf("建立抄錶資料表失敗: %w", err)
 	}
+	// 存氣紀錄、調漲紀錄
+	if err := ensureExtras(db); err != nil {
+		return fmt.Errorf("建立存氣、調漲紀錄失敗: %w", err)
+	}
 	return nil
 }
 

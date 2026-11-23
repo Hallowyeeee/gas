@@ -33,13 +33,15 @@ func ensureMeter(db *sql.DB) error {
 
 const maxPhotoBytes = 2 << 20
 
+// chargeMode 算桶、計流量是每位客人自己設定（可以兩種一起用）。
+// 有任何一位計流量的客人，就回 both（師傅手機出現「抄錶」、統計出現計流量分頁）。
 func (a *App) chargeMode(ctx context.Context) string {
-	var v string
-	a.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'charge_mode'`).Scan(&v)
-	if v != "meter" && v != "both" {
-		v = "cylinder"
+	var n int
+	a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM customers WHERE charge_type = 'meter' AND active = 1`).Scan(&n)
+	if n > 0 {
+		return "both"
 	}
-	return v
+	return "cylinder"
 }
 
 // 計流量的客人（師傅抄錶時選）：只給名字、地址、錶號、上次度數

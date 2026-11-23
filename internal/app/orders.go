@@ -266,7 +266,9 @@ func (a *App) listOrders(r *http.Request, u *User) (any, error) {
 		       o.ordered_at, o.dispatched_at, o.delivered_at, o.delivery_date, o.delivery_slot, o.seen_at, o.reminded_at,
 		       COALESCE((SELECT SUM(amount) FROM payments WHERE order_id = o.id),0) AS paid_amount,
 		       (SELECT group_concat(p.name || '×' || oi.qty, '、') FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS summary,
-		       (SELECT SUM(oi.qty) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id AND p.category = 'gas') AS gas_qty
+		       (SELECT SUM(oi.qty) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id AND p.category = 'gas') AS gas_qty,
+		       (SELECT SUM(oi.qty) FROM order_items oi WHERE oi.order_id = o.id) AS item_qty,
+		       (SELECT json_group_array(json_object('name', p.name, 'qty', oi.qty, 'amount', oi.amount)) FROM order_items oi JOIN products p ON p.id = oi.product_id WHERE oi.order_id = o.id) AS lines
 		FROM orders o JOIN customers c ON c.id = o.customer_id LEFT JOIN users u ON u.id = o.driver_id
 		WHERE (? = '' OR o.status = ?)
 		  AND (? = '' OR o.driver_id = ?)
@@ -469,6 +471,7 @@ func (a *App) deliverOrder(r *http.Request, u *User) (any, error) {
 			EmptiesReturned int64 `json:"empties_returned"`
 		} `json:"empties"`
 		Deposit *depositIn `json:"deposit"`
+		Credit  *creditIn  `json:"credit"` // 退存氣（只記公斤）
 		Note    *string    `json:"note"`
 	}
 	if err := readJSON(r, &in); err != nil {
@@ -520,6 +523,11 @@ func (a *App) deliverOrder(r *http.Request, u *User) (any, error) {
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO cylinder_deposits (customer_id, product_id, qty_change, amount, method, collected_by, order_id, receipt_no, note, created_by)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, customerID, d.ProductID, d.QtyChange, d.Amount, d.Method, collector, id, d.ReceiptNo, d.Note, u.ID); err != nil {
+			return nil, err
+		}
+	}
+	if c := in.Credit; c != nil && c.Kg != 0 {
+		if err := insertCredit(ctx, tx, customerID, &id, *c, u.ID); err != nil {
 			return nil, err
 		}
 	}

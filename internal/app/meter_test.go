@@ -15,7 +15,7 @@ func TestMeterReadings(t *testing.T) {
 	boss.ok("POST", "/api/customers", map[string]any{"name": "王小明", "address": "中正路 2 號"})
 
 	l := ming.ok("GET", "/api/meter/customers", nil)
-	if cs := l["customers"].([]any); len(cs) != 1 || l["mode"] != "cylinder" {
+	if cs := l["customers"].([]any); len(cs) != 1 || l["mode"] != "both" {
 		t.Fatal("只列計流量客人", l)
 	}
 	if code, _, _ := ming.do("POST", "/api/meter/readings", map[string]any{"customer_id": cid, "reading": 100}); code != 400 {

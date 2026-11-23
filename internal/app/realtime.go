@@ -305,6 +305,9 @@ var sendWebPush = webpush.SendNotification
 // onDispatch：派單後即時通知師傅（畫面開著 → 即時；沒開 → 推播）
 func (a *App) onDispatch(driverID int64, o map[string]any) {
 	msg := fmt.Sprintf("%v｜%v", o["customer_name"], o["address"])
+	if b := orderBrief(o); b != "" {
+		msg += "\n" + b
+	}
 	a.Events.Publish(driverID, Event{Type: "dispatch", Message: msg, Order: o})
 	go a.SendPush(driverID, "新派單 "+fmt.Sprint(o["order_no"]), msg, fmt.Sprintf("/#/my/%v", o["id"]))
 }

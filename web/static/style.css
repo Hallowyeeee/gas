@@ -290,3 +290,11 @@ dialog.wide { width:min(1100px, 96vw); }
 .stat-row { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin:14px 0; }
 .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
 .stat .n { font-size:30px; font-weight:700; margin:4px 0; }
+/* 師傅手機：品項隻數、金額 */
+.job-lines { margin:6px 0; padding:6px 10px; border-radius:8px; background:var(--bg, rgba(0,0,0,.03)); }
+.job-lines .row { padding:2px 0; }
+.job-total { border-top:1px dashed var(--line); margin-top:4px; padding-top:4px !important; }
+/* 師傅手機：品項隻數、金額 */
+.job-lines { margin:6px 0; padding:6px 10px; border-radius:8px; background:var(--bg, rgba(0,0,0,.03)); }
+.job-lines .row { padding:2px 0; }
+.job-total { border-top:1px dashed var(--line); margin-top:4px; padding-top:4px !important; }

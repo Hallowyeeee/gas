@@ -30,3 +30,8 @@ var Notify string
 //
 //go:embed meter.sql
 var Meter string
+
+// Extras 存氣紀錄、調漲紀錄。每次開程式都跑（沒有才建），不佔版本號。
+//
+//go:embed extras.sql
+var Extras string

@@ -50,6 +50,13 @@ func (a *App) getCustomer(r *http.Request, u *User) (any, error) {
 	if c["phones"], err = rows(ctx, a.DB, `SELECT id, phone, note FROM customer_phones WHERE customer_id = ? ORDER BY id`, id); err != nil {
 		return nil, err
 	}
+	if c["last_raise"], err = row(ctx, a.DB, `SELECT pr.raised_on, pr.old_price, pr.new_price, p.name AS product_name FROM price_raises pr
+		LEFT JOIN products p ON p.id = pr.product_id WHERE pr.customer_id = ? ORDER BY pr.raised_on DESC, pr.id DESC LIMIT 1`, id); err != nil {
+		return nil, err
+	}
+	var credit float64
+	a.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(kg),0) FROM gas_credits WHERE customer_id = ?`, id).Scan(&credit)
+	c["gas_credit_kg"] = credit
 	if c["prices"], err = rows(ctx, a.DB, `SELECT cp.product_id, p.name, cp.price FROM customer_prices cp JOIN products p ON p.id = cp.product_id WHERE cp.customer_id = ?`, id); err != nil {
 		return nil, err
 	}
@@ -118,6 +125,15 @@ func (a *App) setCustomerPrice(r *http.Request, u *User) (any, error) {
 	}
 	if price < 0 {
 		return nil, bad("價格不能是負的")
+	}
+	// 原本就有價格、而且改了：記一筆調漲紀錄
+	var old sql.NullInt64
+	a.DB.QueryRowContext(r.Context(), `SELECT price FROM customer_prices WHERE customer_id = ? AND product_id = ?`, id, pid).Scan(&old)
+	if old.Valid && old.Int64 != price {
+		if _, err := a.DB.ExecContext(r.Context(), `INSERT INTO price_raises (customer_id, product_id, old_price, new_price, raised_on, created_by)
+			VALUES (?, ?, ?, ?, date('now','localtime'), ?)`, id, pid, old.Int64, price, u.ID); err != nil {
+			return nil, err
+		}
 	}
 	if _, err = a.DB.ExecContext(r.Context(), `INSERT INTO customer_prices (customer_id, product_id, price) VALUES (?, ?, ?)
 		ON CONFLICT (customer_id, product_id) DO UPDATE SET price = excluded.price`, id, pid, price); err != nil {
