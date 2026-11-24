@@ -13,28 +13,47 @@ import (
 	gasdb "github.com/hallowyeeee/gas/db"
 )
 
-// 計流量（抄錶）收費：師傅輸入這次錶上的度數，程式算出用了幾度、要收多少。
-// 本店收費方式在設定 charge_mode：cylinder 只算桶（預設）、meter 只計流量、both 兩種都有。
+// 計量（計流量）收費：記下這次錶上的度數，程式算出用了幾度、換成幾公斤、要收多少。
+// 用量（度）× 流量係數 = 公斤；公斤 × 每公斤單價 = 金額（無條件進位到元）。
+// 每位客人在客戶頁「計量」卡片填每公斤單價就算計量客人（charge_type = meter）。
 
 func ensureMeter(db *sql.DB) error {
 	for _, c := range [][3]string{
 		{"customers", "charge_type", "TEXT NOT NULL DEFAULT 'cylinder'"}, // cylinder 算桶 / meter 計流量
 		{"customers", "meter_no", "TEXT"},                                // 錶號
-		{"customers", "meter_price", "INTEGER"},                          // 每度單價
-		{"customers", "meter_start", "REAL"},                             // 起始度數（第一次抄錶前的錶數）
+		{"customers", "meter_price", "INTEGER"},                          // 每公斤單價（可以有小數，例 32.9）
+		{"customers", "meter_coef", "REAL"},                              // 流量係數（1 度 = 幾公斤，店家自己填）
+		{"customers", "meter_start", "REAL"},                             // 起始度數（第一次記度數前的錶數）
 	} {
 		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
 			return err
 		}
 	}
-	_, err := db.Exec(gasdb.Meter)
-	return err
+	if _, err := db.Exec(gasdb.Meter); err != nil {
+		return err
+	}
+	for _, c := range [][3]string{
+		{"meter_readings", "coef", "REAL"}, // 記度數當下的流量係數（舊紀錄沒有）
+		{"meter_readings", "kg", "REAL"},   // 公斤 = 用量 × 係數
+	} {
+		if err := ensureColumn(db, c[0], c[1], c[2]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// meterAmount 公斤 = 度數 × 係數（不四捨五入，只去掉電腦小數誤差）；金額 = 公斤 × 單價，無條件進位到元
+func meterAmount(usage, coef, price float64) (kg float64, amount int64) {
+	kg = math.Round(usage*coef*10000) / 10000
+	amount = int64(math.Ceil(math.Round(kg*price*1e6) / 1e6))
+	return
 }
 
 const maxPhotoBytes = 2 << 20
 
 // chargeMode 算桶、計流量是每位客人自己設定（可以兩種一起用）。
-// 有任何一位計流量的客人，就回 both（師傅手機出現「抄錶」、統計出現計流量分頁）。
+// 有任何一位計流量的客人，就回 both（師傅手機出現「度數」、統計出現計流量分頁）。
 func (a *App) chargeMode(ctx context.Context) string {
 	var n int
 	a.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM customers WHERE charge_type = 'meter' AND active = 1`).Scan(&n)
@@ -49,7 +68,7 @@ func (a *App) meterCustomers(r *http.Request, u *User) (any, error) {
 	ctx := r.Context()
 	month := time.Now().Format("2006-01")
 	list, err := rows(ctx, a.DB, `SELECT c.id, c.name, c.code, c.address, c.floor, c.meter_no, c.billing_type,
-			CASE WHEN c.meter_price > 0 THEN 1 ELSE 0 END AS has_price, `+priceCol(u)+`
+			CASE WHEN c.meter_price > 0 AND c.meter_coef > 0 THEN 1 ELSE 0 END AS has_price, c.meter_coef, `+priceCol(u)+`
 			COALESCE((SELECT reading FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL ORDER BY m.read_at DESC, m.id DESC LIMIT 1), c.meter_start) AS last_reading,
 			(SELECT read_at FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL ORDER BY m.read_at DESC, m.id DESC LIMIT 1) AS last_read_at,
 			(SELECT usage FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL AND m.usage > 0 ORDER BY m.read_at DESC, m.id DESC LIMIT 1) AS prev_usage,
@@ -116,20 +135,22 @@ func (a *App) createMeterReadingH(r *http.Request, u *User) (any, error) {
 	}
 	defer tx.Rollback()
 	var chargeType, billing string
-	var price sql.NullInt64
-	var start sql.NullFloat64
-	err = tx.QueryRowContext(ctx, `SELECT charge_type, billing_type, meter_price, meter_start FROM customers WHERE id = ? AND active = 1`, in.CustomerID).
-		Scan(&chargeType, &billing, &price, &start)
+	var price, coef, start sql.NullFloat64
+	err = tx.QueryRowContext(ctx, `SELECT charge_type, billing_type, meter_price, meter_coef, meter_start FROM customers WHERE id = ? AND active = 1`, in.CustomerID).
+		Scan(&chargeType, &billing, &price, &coef, &start)
 	if err == sql.ErrNoRows {
 		return nil, bad("找不到客戶")
 	} else if err != nil {
 		return nil, err
 	}
 	if chargeType != "meter" {
-		return nil, bad("這位客人不是計流量收費")
+		return nil, bad("這位客人不是計量收費")
 	}
-	if !price.Valid || price.Int64 <= 0 {
-		return nil, bad("這位客人還沒填每度單價，請店裡先到客戶資料填好")
+	if !price.Valid || price.Float64 <= 0 {
+		return nil, bad("這位客人還沒填每公斤單價，請店裡先到客戶頁「計量」填好")
+	}
+	if !coef.Valid || coef.Float64 <= 0 {
+		return nil, bad("這位客人還沒填流量係數，請店裡先到客戶頁「計量」填好")
 	}
 	var prev sql.NullFloat64
 	tx.QueryRowContext(ctx, `SELECT reading FROM meter_readings WHERE customer_id = ? AND cancelled_at IS NULL ORDER BY read_at DESC, id DESC LIMIT 1`, in.CustomerID).Scan(&prev)
@@ -144,22 +165,22 @@ func (a *App) createMeterReadingH(r *http.Request, u *User) (any, error) {
 	if prev.Valid {
 		p = prev.Float64
 	} else {
-		note = strings.TrimSpace("第一次抄錶，當作起始度數 " + note)
+		note = strings.TrimSpace("第一次記度數，當作起始度數 " + note)
 	}
 	usage := math.Round((in.Reading-p)*100) / 100
 	if usage < 0 {
 		return nil, bad("這次度數比上次（" + strconv.FormatFloat(p, 'f', -1, 64) + "）還小，請再看一次錶")
 	}
-	amount := int64(math.Round(usage * float64(price.Int64)))
-	res, err := tx.ExecContext(ctx, `INSERT INTO meter_readings (customer_id, prev_reading, reading, usage, unit_price, amount, billing_type, photo, note, read_by)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, in.CustomerID, p, in.Reading, usage, price.Int64, amount, billing, photo, nullIfEmpty(note), u.ID)
+	kg, amount := meterAmount(usage, coef.Float64, price.Float64)
+	res, err := tx.ExecContext(ctx, `INSERT INTO meter_readings (customer_id, prev_reading, reading, usage, coef, kg, unit_price, amount, billing_type, photo, note, read_by)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, in.CustomerID, p, in.Reading, usage, coef.Float64, kg, price.Float64, amount, billing, photo, nullIfEmpty(note), u.ID)
 	if err != nil {
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	if in.CollectedAmount != 0 {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO payments (customer_id, amount, method, collected_by, note, created_by) VALUES (?, ?, ?, ?, ?, ?)`,
-			in.CustomerID, in.CollectedAmount, in.Method, u.ID, "抄錶收款", u.ID); err != nil {
+			in.CustomerID, in.CollectedAmount, in.Method, u.ID, "度數收款", u.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -169,7 +190,7 @@ func (a *App) createMeterReadingH(r *http.Request, u *User) (any, error) {
 	return row(ctx, a.DB, meterSelect+` WHERE m.id = ?`, id)
 }
 
-const meterSelect = `SELECT m.id, m.customer_id, c.name AS customer_name, m.prev_reading, m.reading, m.usage, m.unit_price, m.amount,
+const meterSelect = `SELECT m.id, m.customer_id, c.name AS customer_name, m.prev_reading, m.reading, m.usage, m.coef, m.kg, m.unit_price, m.amount,
 	m.billing_type, m.note, m.read_at, m.cancelled_at, u.name AS read_by_name, (m.photo IS NOT NULL) AS has_photo
 	FROM meter_readings m JOIN customers c ON c.id = m.customer_id LEFT JOIN users u ON u.id = m.read_by`
 
@@ -224,7 +245,7 @@ func (a *App) cancelMeterReading(r *http.Request, u *User) (any, error) {
 		return nil, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return nil, notFound("找不到這筆抄錶，或已經作廢")
+		return nil, notFound("找不到這筆度數，或已經作廢")
 	}
 	return nil, nil
 }
@@ -254,7 +275,8 @@ func (a *App) usageStats(r *http.Request, u *User) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	meter, err := rows(ctx, a.DB, `SELECT c.id AS customer_id, c.name, c.code, c.address, c.meter_no, c.meter_price, c.billing_type,
+	meter, err := rows(ctx, a.DB, `SELECT c.id AS customer_id, c.name, c.code, c.address, c.meter_no, c.meter_price, c.meter_coef, c.billing_type,
+			(SELECT SUM(kg) FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL AND strftime('%Y-%m', m.read_at) = ?1) AS kg,
 			(SELECT MIN(prev_reading) FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL AND strftime('%Y-%m', m.read_at) = ?1) AS from_reading,
 			(SELECT MAX(reading) FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL AND strftime('%Y-%m', m.read_at) = ?1) AS to_reading,
 			(SELECT SUM(usage) FROM meter_readings m WHERE m.customer_id = c.id AND m.cancelled_at IS NULL AND strftime('%Y-%m', m.read_at) = ?1) AS usage,
@@ -270,4 +292,40 @@ func (a *App) usageStats(r *http.Request, u *User) (any, error) {
 	}
 	return map[string]any{"month": month, "prev_month": prevMonth, "mode": a.chargeMode(ctx),
 		"cylinders": cyl, "cylinders_prev": prev, "meter": meter}, nil
+}
+
+const defaultBillNotice = "壹：本公司流量表為原裝進口，在正常使用下保固期為一年，若是人為損壞則用戶自行負擔。\n貳：若瓦斯流量表故障，則以前三個月的平均度數計價。"
+
+// 請款單：一筆度數紀錄印成一張請款單＋簽收回執聯。
+// 計費期間 = 上一筆度數的日期 ～ 這筆的日期；爐具金額預設 = 這段期間送達的非瓦斯商品（列印前可以改）。
+func (a *App) meterBill(r *http.Request, u *User) (any, error) {
+	id, err := pathID(r)
+	if err != nil {
+		return nil, err
+	}
+	ctx := r.Context()
+	b, err := row(ctx, a.DB, `SELECT m.id, m.customer_id, m.prev_reading, m.reading, m.usage, m.coef, m.kg, m.unit_price, m.amount, m.read_at, m.note, m.cancelled_at,
+			c.name AS customer_name, c.code, c.phone, c.address, c.tax_id, c.invoice_title,
+			COALESCE((SELECT p.read_at FROM meter_readings p WHERE p.customer_id = m.customer_id AND p.cancelled_at IS NULL
+				AND (p.read_at < m.read_at OR (p.read_at = m.read_at AND p.id < m.id)) ORDER BY p.read_at DESC, p.id DESC LIMIT 1), m.read_at) AS period_from
+		FROM meter_readings m JOIN customers c ON c.id = m.customer_id WHERE m.id = ?`, id)
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return nil, notFound("找不到這筆度數")
+	}
+	var stove int64
+	a.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(oi.amount),0) FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id
+		WHERE o.customer_id = ? AND o.status = 'delivered' AND p.category <> 'gas' AND o.delivered_at > ? AND o.delivered_at <= ?`,
+		b["customer_id"], b["period_from"], b["read_at"]).Scan(&stove)
+	b["stove_amount"] = stove
+	notice := defaultBillNotice
+	var v sql.NullString
+	if a.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'bill_notice'`).Scan(&v) == nil && strings.TrimSpace(v.String) != "" {
+		notice = v.String
+	}
+	b["notice"] = notice
+	b["made_by"] = u.Name
+	return b, nil
 }

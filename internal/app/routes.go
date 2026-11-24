@@ -150,6 +150,7 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/meter/readings", a.route(a.listMeterReadings))
 	m.HandleFunc("POST /api/meter/readings", a.createMeterReading)
 	m.HandleFunc("GET /api/meter/readings/{id}/photo", a.meterPhoto)
+	m.HandleFunc("GET /api/meter/readings/{id}/bill", a.route(a.meterBill, office...))
 	m.HandleFunc("POST /api/meter/readings/{id}/cancel", a.route(a.cancelMeterReading, office...))
 	m.HandleFunc("GET /api/usage", a.route(a.usageStats, office...))
 	m.HandleFunc("GET /api/customers/{id}/credits", a.route(a.listCredits, office...))

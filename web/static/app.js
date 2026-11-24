@@ -537,12 +537,12 @@ async function route(soft) {
   if (stationGate()) return;
   if (!S.me) return showLogin();
   const driver = S.me.role === 'driver';
-  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '抄錶']] : [])] : OFFICE_NAV;
+  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '度數']] : [])] : OFFICE_NAV;
   const shellKey = S.me.role + S.me.id + chargeMode();
   if (lastShell !== shellKey) {
     const first = !lastShell;
     shell(nav); lastShell = shellKey; connectEvents();
-    // 本店收費方式（算桶／計流量）改了，師傅手機要多一個「抄錶」
+    // 有沒有計量客人改了，師傅手機要多一個「度數」
     if (first) api('GET', '/api/meter/customers').then(r => { if (r.mode && r.mode !== chargeMode()) { store.set('chargeMode', r.mode); lastShell = ''; route(); } }).catch(() => { });
     if (driver) syncPush();
     if (S.me.role === 'admin') api('GET', '/api/system').then(sys => {
@@ -648,7 +648,7 @@ async function hubMoney(view) {
   view.innerHTML = cardGrid('帳務', '', [
     { href: '#/dashboard', icon: '📊', title: '儀表板', desc: '今天完成多少、接單派送量、本週本月營業額、每月長條圖' },
     { href: '#/reconcile', icon: '🧾', title: '每日對帳', desc: '每位師傅收了多少、該交多少、交了沒' },
-    { href: '#/usage', icon: '📈', title: '用量統計', desc: chargeMode() === 'meter' ? '每位客人一個月用幾度、誰還沒抄錶' : chargeMode() === 'both' ? '每位客人一個月幾桶、幾度，誰還沒抄錶' : '每位客人一個月用幾桶，跟上個月比' },
+    { href: '#/usage', icon: '📈', title: '用量統計', desc: chargeMode() === 'meter' ? '每位客人一個月用幾度、誰還沒記度數' : chargeMode() === 'both' ? '每位客人一個月幾桶、幾度，誰還沒記度數' : '每位客人一個月用幾桶，跟上個月比' },
     { href: '#/orders/cashdebt', icon: '⚠️', title: '現金欠款', desc: '送到了但錢沒收齊的現結單', count: debt.length || '', hl: debt.length > 0 },
     { href: '#/orders/monthlydebt', icon: '📒', title: '月結欠款', desc: '月結客戶目前還沒付的錢', count: monthly.length ? money(monthly.reduce((s, b) => s + b.balance, 0)) : '' },
   ]);
@@ -1476,11 +1476,6 @@ function customerFormHTML(c, drivers) {
     <div><label>結帳方式 <span class="muted">（沒勾＝現結）</span></label><label class="check-box"><input type="checkbox" name="monthly_box" ${c.billing_type === 'monthly' ? 'checked' : ''}>月結客戶</label></div>
     <div><label>統一編號 <span class="muted">（要開發票才填）</span></label><input name="tax_id" value="${esc(c.tax_id ?? '')}"></div>
     <div><label>發票抬頭 <span class="muted">（要開發票才填）</span></label><input name="invoice_title" value="${esc(c.invoice_title ?? '')}"></div>
-    ${(() => { const mf = c.charge_type === 'meter' ? '' : ' hidden'; return `
-    <div><label>計流量 <span class="muted">（可以跟算桶一起用）</span></label><label class="check-box"><input type="checkbox" name="meter_box" ${c.charge_type === 'meter' ? 'checked' : ''} onchange="this.form.querySelectorAll('.meter-f').forEach(x => x.hidden = !this.checked)">有瓦斯錶，要抄錶</label></div>
-    <div class="meter-f"${mf}><label>錶號</label><input name="meter_no" value="${esc(c.meter_no ?? '')}"></div>
-    <div class="meter-f"${mf}><label>每度單價 <span class="muted">（沒填不能抄錶）</span></label><input name="meter_price" type="number" min="1" value="${c.meter_price ?? ''}"></div>
-    <div class="meter-f"${mf}><label>起始度數 <span class="muted">（選填，第一次抄錶前的錶數）</span></label><input name="meter_start" inputmode="decimal" value="${c.meter_start ?? ''}"></div>`; })()}
     </div>
     <label>備註 <span class="muted">（店裡自己看）</span></label><textarea name="note">${esc(c.note || '')}</textarea>
     <label>訂單常態備註 <span class="muted">（每張單自動帶給師傅，例如：不要給好桶、按對講機 2 樓）</span></label><input name="order_note" value="${esc(c.order_note || '')}">`;
@@ -1491,8 +1486,6 @@ function readCustomerForm(form) {
   f.tax_id = f.tax_id.trim() || null; f.invoice_title = f.invoice_title.trim() || null;
   f.needs_invoice = !!(f.tax_id || f.invoice_title);
   f.billing_type = form.monthly_box.checked ? 'monthly' : 'cash'; delete f.monthly_box;
-  f.charge_type = form.meter_box.checked ? 'meter' : 'cylinder'; delete f.meter_box;
-  if ('meter_price' in f) { f.meter_price = parseInt(f.meter_price) || null; f.meter_start = f.meter_start.trim() === '' || isNaN(parseFloat(f.meter_start)) ? null : String(parseFloat(f.meter_start)); f.meter_no = f.meter_no.trim() || null; }
   return f;
 }
 async function customerDialog(c, done) {
@@ -1560,7 +1553,7 @@ async function customerDetail(view, id) {
   const lr = c.last_raise;
   view.innerHTML = `<p><a href="#/customers">← 客戶清單</a></p>
     <div class="cust-head"><span class="cust-name">${esc(c.name)}</span><span class="cust-code">${c.code ? '編號 ' + esc(c.code) : '<span class="muted">沒有編號</span>'}</span>
-      ${c.needs_invoice ? '<span class="pill blue">要發票</span>' : ''}${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}${c.charge_type === 'meter' ? '<span class="pill blue">計流量</span>' : ''}
+      ${c.needs_invoice ? '<span class="pill blue">要發票</span>' : ''}${c.billing_type === 'monthly' ? '<span class="pill blue">月結</span>' : ''}${c.charge_type === 'meter' ? '<span class="pill blue">計量</span>' : ''}
       ${lr ? `<span class="pill">最近調漲 ${esc(lr.raised_on)}</span>` : ''}${c.gas_credit_kg ? `<span class="pill accent">存氣 ${fmtDeg(c.gas_credit_kg)} kg</span>` : ''}
       <span class="pill ${c.balance > 0 ? 'bad' : 'ok'}">${c.balance > 0 ? '欠 ' + money(c.balance) : '沒有欠款'}</span>${c.active ? '' : '<span class="pill bad">已停用</span>'}
       <span class="grow"></span><button id="pay">記收款</button><button class="primary" id="order">＋ 記單</button></div>
@@ -1569,7 +1562,7 @@ async function customerDetail(view, id) {
          ['orders', '🧾', '訂單', `最近 ${c.recent_orders.length} 張・共買 ${money(c.total_sales)}`],
          ['prices', '💲', '價格', noPrice ? `<span class="price-none">${noPrice} 種瓦斯還沒填價格</span>` : gasList.map(p => esc(p.name) + ' ' + money(priceMap[p.id])).join('・') + (lr ? `・調漲 ${esc(lr.raised_on)}` : '')],
          ['credit', '🛢️', '存氣', c.gas_credit_kg ? `目前存氣 <b>${fmtDeg(c.gas_credit_kg)}</b> 公斤` : '沒有存氣'],
-         ...(c.charge_type === 'meter' ? [['meter', '🔢', '抄錶', c.meter_price ? `每度 ${money(c.meter_price)}${c.meter_no ? '・錶號 ' + esc(c.meter_no) : ''}` : '<span class="price-none">還沒填每度單價</span>']] : []),
+         ['meter', '🔢', '計量', meterCardDesc(c)],
          ['pays', '💵', '付款紀錄', `共付 ${money(c.total_paid)}`],
          ['note', '📝', '備註', c.order_note ? '常態備註：' + esc(c.order_note) : '還沒設常態備註']]
         .map(([k, ic, t, d]) => `<a class="hubcard${k === tab ? ' hl' : ''}" data-tab="${k}"><div class="ic">${ic}</div><h3>${t}</h3><p>${d}</p></a>`).join('')}</div>
@@ -1665,11 +1658,15 @@ async function customerDetail(view, id) {
     } else if (k === 'meter') {
       sec.innerHTML = '<div class="muted">載入中…</div>';
       const list = await api('GET', '/api/meter/readings?customer_id=' + id).catch(() => []);
-      sec.innerHTML = `<div class="row between" style="margin-bottom:8px"><span class="muted">每次抄錶的度數、金額和照片。抄錯可以作廢（已收的錢不會自動刪）。</span><button class="primary" id="mAdd">＋ 抄錶</button></div>${meterReadingsHTML(list)}`;
+      sec.innerHTML = meterSetupHTML(c) + (c.charge_type === 'meter' ? `<div class="row between" style="margin:14px 0 8px"><h3 style="margin:0">度數紀錄</h3><button class="primary" id="mAdd">＋ 記度數</button></div>
+        <p class="muted" style="margin-top:0">記錯可以作廢（已收的錢不會自動刪）。每一筆右邊可以列印請款單。</p>${meterReadingsHTML(list)}` : '');
+      bindMeterSetup(sec, c, reload);
+      if (c.charge_type !== 'meter') return;
       $('#mAdd').onclick = () => meterDialog(id, reload);
       sec.onclick = async e => {
+        const pb = e.target.closest('[data-mbill]'); if (pb) return billDialog(pb.dataset.mbill);
         const b = e.target.closest('[data-mcancel]'); if (!b) return;
-        if (!confirm('作廢這筆抄錶？金額不會再算進欠款。')) return;
+        if (!confirm('作廢這筆度數？金額不會再算進欠款。')) return;
         try { await api('POST', `/api/meter/readings/${b.dataset.mcancel}/cancel`, {}); toast('已作廢'); reload(); } catch (err) { toast(err.message, 'bad'); }
       };
       return;
@@ -1793,7 +1790,11 @@ async function settings(view) {
       ${admin ? `<label>派單幾分鐘師傅還沒看，就在電腦上變紅色、手機再響一次（0 = 不提醒）</label>
       <p class="row"><input id="remindMin" type="number" min="0" max="120" value="${ps.remind_minutes}" style="width:100px"> 分鐘 <button id="saveRemind">儲存</button></p>` : ''}</div>`;
   const stationCard = await stationSettingsCard(sys, admin);
-  view.innerHTML = `<h2>⚙️ 設定</h2>${stationCard}${notifyCard}${callCard}${legacyCard}
+  const billCard = admin ? `<div class="card"><h3 style="margin-top:0">🧾 請款單</h3>
+      <label>注意事項 <span class="muted">（印在計量請款單上，每一行一點）</span></label>
+      <textarea id="billNotice" rows="3">${esc(cfg.bill_notice || BILL_NOTICE)}</textarea>
+      <p class="row"><button id="saveBill">儲存</button><button class="ghost" id="resetBill">改回預設文字</button></p></div>` : '';
+  view.innerHTML = `<h2>⚙️ 設定</h2>${stationCard}${notifyCard}${callCard}${legacyCard}${billCard}
     <div class="card"><h3 style="margin-top:0">📱 手機網址</h3>
       <div class="${sys.tunnel_url ? '' : 'muted'}">${esc(sys.tunnel_status)}</div>
       <div class="url">${esc(sys.tunnel_url || '')}</div><div id="qr"></div>
@@ -1823,6 +1824,10 @@ async function settings(view) {
   bindCallSettings(view);
   bindLegacySettings(view);
   bindStationSettings(view);
+  if (admin) {
+    $('#saveBill').onclick = async () => { try { await api('PUT', '/api/settings', { bill_notice: $('#billNotice').value.trim() }); toast('已儲存', 'ok'); } catch (err) { toast(err.message, 'bad'); } };
+    $('#resetBill').onclick = () => { $('#billNotice').value = BILL_NOTICE; };
+  }
   if (sys.tunnel_url && window.qrcode) { const q = qrcode(0, 'M'); q.addData(sys.tunnel_url); q.make(); $('#qr').innerHTML = q.createSvgTag(5, 0); }
   $('#notify').onclick = async e => {
     const b = e.target.closest('[data-ptest]'); if (!b) return;
@@ -2141,7 +2146,7 @@ function driverHelp(view) {
 }
 
 // ---------------------------------------------------------------------
-// 計流量（抄錶）：師傅輸入錶上的度數，程式算用了幾度、要收多少
+// 計量：記下錶上的度數，程式算用了幾度 × 流量係數 = 公斤，公斤 × 每公斤單價 = 金額（無條件進位）
 // ---------------------------------------------------------------------
 const chargeMode = () => store.get('chargeMode', 'cylinder');
 const fmtDeg = n => n == null ? '—' : (Math.round(n * 100) / 100).toLocaleString('zh-TW');
@@ -2153,11 +2158,13 @@ async function shrinkPhoto(file) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.7);
 }
-// 抄錶表單（師傅手機、店裡客戶頁共用）。c = /api/meter/customers 的一位客人
+// 度數表單（師傅手機、店裡客戶頁共用）。c = /api/meter/customers 的一位客人
+// 金額算法跟後端 meterAmount 一樣：公斤只去掉電腦小數誤差，金額無條件進位到元
+const meterCalc = (use, coef, price) => { const kg = Math.round(use * coef * 10000) / 10000; return { kg, amount: Math.ceil(Math.round(kg * price * 1e6) / 1e6) }; };
 function meterFormHTML(c) {
   const monthly = c.billing_type === 'monthly';
   return `<div class="job"><div class="name">${esc(c.name)}</div><div class="addr">${esc(c.address || '')}${c.floor ? '・' + esc(c.floor) : ''}</div>
-      <div class="muted">錶號 ${esc(c.meter_no || '—')}・每度 ${c.meter_price ? money(c.meter_price) : '<span class="price-none">未填單價</span>'}${monthly ? '・<span class="pill blue">月結</span>' : ''}</div>
+      <div class="muted">流量係數 ${c.meter_coef ? fmtDeg(c.meter_coef) : '<span class="price-none">未填係數</span>'}・每公斤 ${c.meter_price ? money(c.meter_price) : '<span class="price-none">未填單價</span>'}${monthly ? '・<span class="pill blue">月結</span>' : ''}</div>
       <div style="margin-top:6px">上次度數 <b>${c.last_reading == null ? '沒有（這次當起始）' : fmtDeg(c.last_reading)}</b>${c.last_read_at ? ` <span class="muted">${esc(c.last_read_at.slice(0, 10))}</span>` : ''}</div></div>
     <label>這次錶上的度數</label><input name="reading" inputmode="decimal" required autocomplete="off" style="font-size:24px">
     <div class="meter-calc" id="mcalc"></div>
@@ -2174,12 +2181,12 @@ function bindMeterForm(root, c, done) {
   const calc = () => {
     const v = parseFloat(f.reading.value), box = $('#mcalc', root);
     if (isNaN(v)) { box.innerHTML = ''; amount = 0; return; }
-    if (c.last_reading == null) { box.innerHTML = '<span class="muted">第一次抄錶，這次度數當作起始，不收錢</span>'; amount = 0; return; }
+    if (c.last_reading == null) { box.innerHTML = '<span class="muted">第一次記度數，這次度數當作起始，不收錢</span>'; amount = 0; return; }
     const use = Math.round((v - c.last_reading) * 100) / 100;
     if (use < 0) { box.innerHTML = `<span class="price-none">比上次（${fmtDeg(c.last_reading)}）還小，請再看一次錶</span>`; amount = 0; return; }
-    amount = Math.round(use * (c.meter_price || 0));
+    const r = meterCalc(use, c.meter_coef || 0, c.meter_price || 0); amount = r.amount;
     const avg = c.prev_usage;
-    box.innerHTML = `用了 <b>${fmtDeg(use)}</b> 度 × ${money(c.meter_price || 0)} = <b class="big">${money(amount)}</b>${avg && use > avg * 3 ? ' <span class="pill bad">比平常多很多，再確認一次</span>' : ''}`;
+    box.innerHTML = `用了 <b>${fmtDeg(use)}</b> 度 × 係數 ${fmtDeg(c.meter_coef || 0)} = <b>${fmtDeg(r.kg)}</b> 公斤 × ${money(c.meter_price || 0)} = <b class="big">${money(amount)}</b>${avg && use > avg * 3 ? ' <span class="pill bad">比平常多很多，再確認一次</span>' : ''}`;
     if (f.collected && !f.collected.dataset.touched) f.collected.value = amount || '';
   };
   f.reading.oninput = calc;
@@ -2193,69 +2200,160 @@ function bindMeterForm(root, c, done) {
     e.preventDefault();
     const v = parseFloat(f.reading.value);
     if (isNaN(v)) return toast('請輸入度數', 'bad');
-    if (!c.meter_price) return toast('這位客人還沒填每度單價，請店裡先到客戶資料填', 'bad');
+    if (!c.meter_price || !c.meter_coef) return toast('這位客人還沒填每公斤單價或流量係數，請店裡先到客戶頁「計量」填', 'bad');
     const body = { customer_id: c.id, reading: v, photo, note: f.note.value.trim() || null };
     if (f.collected) { body.collected_amount = parseInt(f.collected.value) || 0; body.method = ($('#mpay .on', root) || {}).dataset?.m || 'cash'; }
     if (body.collected_amount && body.collected_amount !== amount && !confirm(`收的錢（${money(body.collected_amount)}）跟應收（${money(amount)}）不一樣，確定嗎？`)) return;
     const btn = $('button.ok, button.primary', f); if (btn) btn.disabled = true;
-    try { const r = await api('POST', '/api/meter/readings', body); toast(`已存：${fmtDeg(r.usage)} 度、${money(r.amount)}`, 'ok'); }
+    try { const r = await api('POST', '/api/meter/readings', body); toast(`已存：${fmtDeg(r.usage)} 度、${fmtDeg(r.kg)} 公斤、${money(r.amount)}`, 'ok'); }
     catch (err) {
       if (!err.network) { if (btn) btn.disabled = false; return toast(err.message, 'bad'); }
-      queue('POST', '/api/meter/readings', body, `${c.name} 抄錶`); toast('沒連線，連上後會自動送出', 'ok');
+      queue('POST', '/api/meter/readings', body, `${c.name} 度數`); toast('沒連線，連上後會自動送出', 'ok');
     }
     store.del('c:/api/meter/customers');
     done && done();
   };
 }
 
-// 師傅手機：抄錶清單（這個月還沒抄的排前面）
+// 師傅手機：度數清單（這個月還沒記的排前面）
 async function driverMeter(view, id) {
   const r = await data('/api/meter/customers');
   if (r.mode) store.set('chargeMode', r.mode);
   const list = r.customers || [];
   if (id) {
     const c = list.find(x => x.id === +id);
-    if (!c) { view.innerHTML = '<div class="card">找不到這位客人。<a href="#/meter">回抄錶</a></div>'; return; }
+    if (!c) { view.innerHTML = '<div class="card">找不到這位客人。<a href="#/meter">回度數清單</a></div>'; return; }
     S.live = false;
-    view.innerHTML = `<p><a href="#/meter">← 回抄錶清單</a></p><form class="card">${meterFormHTML(c)}<p><button class="ok lg">存檔</button></p></form>`;
+    view.innerHTML = `<p><a href="#/meter">← 回度數清單</a></p><form class="card">${meterFormHTML(c)}<p><button class="ok lg">存檔</button></p></form>`;
     bindMeterForm(view, c, () => { S.live = true; location.hash = '#/meter'; });
     return;
   }
   const left = list.filter(c => !c.read_this_month).length;
-  view.innerHTML = `<h2>抄錶 ${left ? `<span class="pill accent">這個月還有 ${left} 戶</span>` : '<span class="pill ok">這個月都抄完了</span>'}</h2>
-    <input id="mq" placeholder="找名字、地址、錶號" style="margin-bottom:10px">
+  view.innerHTML = `<h2>度數 ${left ? `<span class="pill accent">這個月還有 ${left} 戶</span>` : '<span class="pill ok">這個月都記完了</span>'}</h2>
+    <input id="mq" placeholder="找名字、地址" style="margin-bottom:10px">
     <div id="ml"></div>`;
   const draw = () => {
     const v = $('#mq').value.trim();
-    $('#ml').innerHTML = list.filter(c => !v || [c.name, c.address, c.meter_no, c.code].some(x => (x || '').includes(v))).map(c => `<div class="job click" data-m="${c.id}">
-      <div class="row between"><span class="name">${esc(c.name)}</span>${c.read_this_month ? '<span class="pill ok">✓ 本月已抄</span>' : '<span class="pill accent">還沒抄</span>'}</div>
+    $('#ml').innerHTML = list.filter(c => !v || [c.name, c.address, c.code].some(x => (x || '').includes(v))).map(c => `<div class="job click" data-m="${c.id}">
+      <div class="row between"><span class="name">${esc(c.name)}</span>${c.read_this_month ? '<span class="pill ok">✓ 本月已記</span>' : '<span class="pill accent">還沒記</span>'}</div>
       <div class="addr">${esc(c.address || '')}${c.floor ? '・' + esc(c.floor) : ''}</div>
-      <div class="muted">錶號 ${esc(c.meter_no || '—')}・上次 ${fmtDeg(c.last_reading)}${c.last_read_at ? '（' + esc(c.last_read_at.slice(5, 10).replace('-', '/')) + '）' : ''}</div></div>`).join('')
-      || '<div class="card muted" style="text-align:center;padding:30px">沒有計流量的客人</div>';
+      <div class="muted">上次度數 ${fmtDeg(c.last_reading)}${c.last_read_at ? '（' + esc(c.last_read_at.slice(5, 10).replace('-', '/')) + '）' : ''}</div></div>`).join('')
+      || '<div class="card muted" style="text-align:center;padding:30px">沒有計量的客人</div>';
   };
   draw();
   $('#mq').oninput = draw;
   $('#ml').onclick = e => { const j = e.target.closest('[data-m]'); if (j) location.hash = '#/meter/' + j.dataset.m; };
 }
 
-// 店裡：客戶頁的抄錶視窗
+// 店裡：客戶頁的記度數視窗
 async function meterDialog(customerId, done) {
   const r = await api('GET', '/api/meter/customers');
   const c = (r.customers || []).find(x => x.id === +customerId);
-  if (!c) return toast('這位客人不是計流量，或已停用', 'bad');
+  if (!c) return toast('這位客人還沒設定計量，或已停用', 'bad');
   const dlg = $('#dlg');
-  dlg.innerHTML = `<form><h2 style="margin-top:0">抄錶</h2>${meterFormHTML(c)}<p class="row"><button class="primary">存檔</button><button type="button" onclick="this.closest('dialog').close()">取消</button></p></form>`;
+  dlg.innerHTML = `<form><h2 style="margin-top:0">記度數</h2>${meterFormHTML(c)}<p class="row"><button class="primary">存檔</button><button type="button" onclick="this.closest('dialog').close()">取消</button></p></form>`;
   bindMeterForm(dlg, c, () => { dlg.close(); done && done(); });
   dlg.showModal();
   $('[name=reading]', dlg).focus();
 }
 function meterReadingsHTML(list) {
-  return `<div class="table-wrap"><table><tr><th>抄錶時間</th><th class="num">上次</th><th class="num">這次</th><th class="num">用量（度）</th><th class="num">單價</th><th class="num">金額</th><th>抄錶人</th><th>照片</th><th></th></tr>
+  return `<div class="table-wrap"><table><tr><th>時間</th><th class="num">上次</th><th class="num">這次</th><th class="num">用量（度）</th><th class="num">係數</th><th class="num">公斤</th><th class="num">每公斤</th><th class="num">金額</th><th>記錄人</th><th>照片</th><th></th></tr>
     ${list.map(m => `<tr style="${m.cancelled_at ? 'opacity:.45;text-decoration:line-through' : ''}"><td>${esc(m.read_at)}</td><td class="num">${fmtDeg(m.prev_reading)}</td><td class="num">${fmtDeg(m.reading)}</td>
-      <td class="num"><b>${fmtDeg(m.usage)}</b></td><td class="num">${money(m.unit_price)}</td><td class="num">${money(m.amount)}${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}</td>
+      <td class="num"><b>${fmtDeg(m.usage)}</b></td><td class="num">${m.coef == null ? '—' : fmtDeg(m.coef)}</td><td class="num">${m.kg == null ? '—' : fmtDeg(m.kg)}</td><td class="num">${money(m.unit_price)}</td><td class="num">${money(m.amount)}${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}</td>
       <td>${esc(m.read_by_name || '')}${m.note ? `<div class="muted">${esc(m.note)}</div>` : ''}</td>
       <td>${m.has_photo ? `<a href="/api/meter/readings/${m.id}/photo" target="_blank"><img class="meter-thumb" src="/api/meter/readings/${m.id}/photo" alt="錶" loading="lazy"></a>` : ''}</td>
-      <td>${m.cancelled_at ? '已作廢' : `<button class="ghost" data-mcancel="${m.id}">作廢</button>`}</td></tr>`).join('') || '<tr><td colspan="9" class="muted">還沒有抄錶紀錄</td></tr>'}</table></div>`;
+      <td style="white-space:nowrap">${m.cancelled_at ? '已作廢' : `<button class="ghost" data-mbill="${m.id}">🖨️ 列印帳單</button><button class="ghost" data-mcancel="${m.id}">作廢</button>`}</td></tr>`).join('') || '<tr><td colspan="11" class="muted">還沒有度數紀錄</td></tr>'}</table></div>`;
+}
+// 客戶頁「計量」卡片的小字
+function meterCardDesc(c) {
+  if (c.charge_type !== 'meter') return '沒有計量（填每公斤單價就開始）';
+  if (!c.meter_coef) return '<span class="price-none">還沒填係數</span>';
+  if (!c.meter_price) return '<span class="price-none">還沒填每公斤單價</span>';
+  return `係數 ${fmtDeg(c.meter_coef)}・每公斤 ${money(c.meter_price)}`;
+}
+// 計量設定：每公斤單價、流量係數、起始度數。填了單價就是計量客人
+function meterSetupHTML(c) {
+  const v = x => x == null ? '' : x;
+  return `<form id="mset" class="form-grid">
+    <div><label>每公斤單價 <span class="muted">（可以有小數，例 32.9）</span></label><input name="meter_price" type="number" step="0.01" min="0" inputmode="decimal" value="${v(c.meter_price)}"></div>
+    <div><label>流量係數 <span class="muted">（1 度 = 幾公斤，例 5.12）</span></label><input name="meter_coef" type="number" step="0.01" min="0" inputmode="decimal" value="${v(c.meter_coef)}"></div>
+    <div><label>起始度數 <span class="muted">（選填，第一次記度數前的錶數）</span></label><input name="meter_start" type="number" step="0.01" min="0" inputmode="decimal" value="${v(c.meter_start)}"></div>
+    <div style="align-self:end"><button class="primary">儲存計量設定</button></div></form>
+    <p class="muted" style="margin:6px 0 0">算法：(這次度數 − 上次度數) × 流量係數 = 公斤，公斤 × 每公斤單價 = 金額（無條件進位到元）。單價清空就不算計量。</p>`;
+}
+function bindMeterSetup(sec, c, done) {
+  const f = $('#mset', sec);
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const num = k => { const x = f[k].value.trim(); return x === '' ? null : String(parseFloat(x)); };
+    const body = { meter_price: num('meter_price'), meter_coef: num('meter_coef'), meter_start: num('meter_start') };
+    body.charge_type = body.meter_price && parseFloat(body.meter_price) > 0 ? 'meter' : 'cylinder';
+    if (body.charge_type === 'meter' && !(parseFloat(body.meter_coef) > 0)) toast('記得填流量係數，沒填不能記度數', 'bad');
+    try { await api('PUT', '/api/customers/' + c.id, body); store.del('c:/api/meter/customers'); toast('計量設定已儲存', 'ok'); done && done(); }
+    catch (err) { toast(err.message, 'bad'); }
+  };
+}
+// 請款單：先在視窗裡確認爐具金額、備註，再印（上半請款單、下半簽收回執聯）
+async function billDialog(readingId) {
+  let b; try { b = await api('GET', `/api/meter/readings/${readingId}/bill`); } catch (err) { return toast(err.message, 'bad'); }
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<form><h2 style="margin-top:0">🖨️ 列印請款單</h2>
+    <div class="muted">${esc(b.customer_name)}・計費期間 ${esc(b.period_from.slice(0, 10))} 至 ${esc(b.read_at.slice(0, 10))}・合計 ${money(b.amount)}</div>
+    <label>爐具金額 <span class="muted">（已自動加這段期間送的爐具、耗材，可以改）</span></label><input name="stove" type="number" min="0" value="${b.stove_amount || ''}">
+    <label>備註 <span class="muted">（印在請款單上）</span></label><input name="note" value="">
+    <p class="muted">注意事項可以到 ⚙️ 設定 →「請款單」改。</p>
+    <p class="row"><button class="primary">列印</button><button type="button" onclick="this.closest('dialog').close()">取消</button></p></form>`;
+  $('form', dlg).onsubmit = e => {
+    e.preventDefault();
+    const f = e.target;
+    printBill({ ...b, stove_amount: parseInt(f.stove.value) || 0, bill_note: f.note.value.trim() });
+    dlg.close();
+  };
+  dlg.showModal();
+}
+const BILL_NOTICE = '壹：本公司流量表為原裝進口，在正常使用下保固期為一年，若是人為損壞則用戶自行負擔。\n貳：若瓦斯流量表故障，則以前三個月的平均度數計價。';
+function billHTML(b) {
+  const d = s => esc((s || '').slice(0, 10).replaceAll('-', '/'));
+  const n2 = x => x == null ? '' : Number(x).toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const num = x => x == null ? '' : Number(x).toLocaleString('zh-TW', { maximumFractionDigits: 4 });
+  const total = (b.amount || 0) + (b.stove_amount || 0);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>請款單 ${esc(b.customer_name)}</title><style>
+    @page { size: A4; margin: 14mm; }
+    body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif; color: #000; margin: 0; font-size: 15px; }
+    h1 { text-align: center; font-size: 26px; letter-spacing: 4px; margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    td { border: 1px solid #000; padding: 6px 8px; vertical-align: middle; word-break: break-all; }
+    td.k { width: 13%; white-space: nowrap; }
+    td.n { text-align: right; font-size: 17px; }
+    .big { font-size: 18px; }
+    .cut { border-top: 1px dashed #000; margin: 34px 0 22px; }
+    .rc { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+    .rc h2 { font-size: 22px; font-weight: normal; margin: 0; letter-spacing: 2px; }
+    .notice { white-space: pre-wrap; line-height: 1.6; }
+  </style></head><body>
+  <h1>請款單</h1>
+  <table>
+    <tr><td class="k">客戶名稱</td><td>${esc(b.customer_name)}</td><td class="k">客戶電話</td><td>${esc(b.phone || '')}</td><td class="k">客戶地址</td><td>${esc(b.address || '')}</td></tr>
+    <tr><td class="k">計費期間</td><td colspan="5" class="big">${d(b.period_from)} 至 ${d(b.read_at)}</td></tr>
+    <tr><td class="k">客戶統編</td><td>${esc(b.tax_id || '')}</td><td class="k">前次度數</td><td class="n">${num(b.prev_reading)}</td><td class="k">本次度數</td><td class="n">${num(b.reading)}</td></tr>
+    <tr><td class="k">實用度數</td><td class="n">${n2(b.usage)}</td><td class="k">流量係數</td><td class="n">${num(b.coef)}</td><td class="k">實用重量</td><td class="n">${n2(b.kg)}</td></tr>
+    <tr><td class="k">單價</td><td class="n">${num(b.unit_price)}</td><td class="k">合計金額</td><td class="n">${num(b.amount)}</td><td class="k">爐具金額</td><td class="n">${b.stove_amount ? num(b.stove_amount) : ''}</td></tr>
+    <tr><td class="k">備註</td><td colspan="3">${esc(b.bill_note || '')}</td><td class="k">總計金額</td><td class="n"><b>${num(total)}</b></td></tr>
+    <tr><td class="k">注意事項</td><td colspan="5" class="notice">${esc(b.notice || '')}</td></tr>
+    <tr><td colspan="6" style="height:70px;vertical-align:bottom">製表：${esc(b.made_by || '')}</td></tr>
+  </table>
+  <div class="cut"></div>
+  <div class="rc"><div>客戶：${esc(b.customer_name)}</div><h2>簽收回執聯</h2><div style="max-width:40%">地址：${esc(b.address || '')}</div></div>
+  <table><tr><td style="width:22%">附簽單　　張</td><td>合計金額：${num(total)} 元</td><td style="width:36%;height:44px;vertical-align:top">客戶簽收：</td></tr></table>
+  </body></html>`;
+}
+// 用隱藏的框印，不會被擋彈出視窗
+function printBill(b) {
+  const fr = document.createElement('iframe');
+  fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.appendChild(fr);
+  const doc = fr.contentWindow.document; doc.open(); doc.write(billHTML(b)); doc.close();
+  setTimeout(() => { fr.contentWindow.focus(); fr.contentWindow.print(); setTimeout(() => fr.remove(), 60000); }, 300);
 }
 
 // 帳務 → 用量統計
@@ -2276,7 +2374,7 @@ async function usagePage(view, arg) {
   const cylQty = cyl.reduce((s, c) => s + c.qty, 0), cylAmt = cyl.reduce((s, c) => s + c.amount, 0);
   const prevQty = d.cylinders_prev.reduce((s, x) => s + x.qty, 0);
   const meter = d.meter, read = meter.filter(m => m.usage != null);
-  const mUse = read.reduce((s, m) => s + m.usage, 0), mAmt = read.reduce((s, m) => s + m.amount, 0);
+  const mUse = read.reduce((s, m) => s + m.usage, 0), mAmt = read.reduce((s, m) => s + m.amount, 0), mKg = read.reduce((s, m) => s + (m.kg || 0), 0);
   const tabs = mode === 'both' ? ['cyl', 'meter'] : [mode === 'meter' ? 'meter' : 'cyl'];
   let tab = store.get('usageTab', tabs[0]); if (!tabs.includes(tab)) tab = tabs[0];
   const diff = (n, p) => { const x = n - (p || 0); return !p ? '<span class="muted">—</span>' : x === 0 ? '<span class="muted">一樣</span>' : `<span style="color:var(--${x > 0 ? 'ok' : 'bad'})">${x > 0 ? '▲' : '▼'} ${fmtDeg(Math.abs(x))}</span>`; };
@@ -2287,21 +2385,21 @@ async function usagePage(view, arg) {
       <div class="row" style="flex-wrap:nowrap"><button class="ghost" data-mon="${shift(-1)}">‹ 上個月</button><input type="month" id="mon" value="${month}" style="width:auto"><button class="ghost" data-mon="${shift(1)}">下個月 ›</button></div></div>
     <div class="stat-row">
       ${tabs.includes('cyl') ? `<div class="stat"><div class="muted">本月桶數</div><div class="n">${cylQty} 桶</div><div class="muted">上個月 ${prevQty} 桶・${money(cylAmt)}</div></div>` : ''}
-      ${tabs.includes('meter') ? `<div class="stat"><div class="muted">本月度數</div><div class="n">${fmtDeg(mUse)} 度</div><div class="muted">${money(mAmt)}・${meter.length - read.length ? `<span class="price-none">${meter.length - read.length} 戶還沒抄</span>` : '全部抄完'}</div></div>` : ''}
-      <div class="stat"><div class="muted">本月瓦斯收入</div><div class="n">${money(cylAmt + mAmt)}</div><div class="muted">${tabs.length > 1 ? `算桶 ${money(cylAmt)}・計流量 ${money(mAmt)}` : '&nbsp;'}</div></div></div>
-    ${tabs.length > 1 ? `<div class="segment" id="utab" style="max-width:360px;margin:6px 0 10px"><button type="button" class="${tab === 'cyl' ? 'on' : ''}" data-t="cyl">算桶</button><button type="button" class="${tab === 'meter' ? 'on' : ''}" data-t="meter">計流量</button></div>` : ''}
+      ${tabs.includes('meter') ? `<div class="stat"><div class="muted">本月度數</div><div class="n">${fmtDeg(mUse)} 度</div><div class="muted">${fmtDeg(mKg)} 公斤・${money(mAmt)}・${meter.length - read.length ? `<span class="price-none">${meter.length - read.length} 戶還沒記</span>` : '全部記完'}</div></div>` : ''}
+      <div class="stat"><div class="muted">本月瓦斯收入</div><div class="n">${money(cylAmt + mAmt)}</div><div class="muted">${tabs.length > 1 ? `算桶 ${money(cylAmt)}・計量 ${money(mAmt)}` : '&nbsp;'}</div></div></div>
+    ${tabs.length > 1 ? `<div class="segment" id="utab" style="max-width:360px;margin:6px 0 10px"><button type="button" class="${tab === 'cyl' ? 'on' : ''}" data-t="cyl">算桶</button><button type="button" class="${tab === 'meter' ? 'on' : ''}" data-t="meter">計量</button></div>` : ''}
     <div class="card table-wrap">${tab === 'cyl' ? `<table><tr><th>客戶</th>${sizes.map(s => `<th class="num">${esc(s)}</th>`).join('')}<th class="num">合計</th><th class="num">上個月</th><th class="num">增減</th><th class="num">金額</th></tr>
       ${cyl.map(c => `<tr class="click" data-c="${c.id}"><td><b>${esc(c.name)}</b>${c.code ? ` <span class="muted">${esc(c.code)}</span>` : ''}<div class="muted">${esc(c.address || '')}</div></td>
         ${sizes.map(s => `<td class="num">${c.q[s] || ''}</td>`).join('')}<td class="num"><b>${c.qty}</b></td><td class="num">${prev[c.id] || ''}</td><td class="num">${diff(c.qty, prev[c.id])}</td><td class="num">${money(c.amount)}</td></tr>`).join('')
         || `<tr><td class="muted" colspan="${sizes.length + 5}">這個月還沒有送達的瓦斯</td></tr>`}
       ${cyl.length ? `<tr><th>合計</th>${sizes.map(s => `<th class="num">${cyl.reduce((n, c) => n + (c.q[s] || 0), 0)}</th>`).join('')}<th class="num">${cylQty}</th><th class="num">${prevQty}</th><th></th><th class="num">${money(cylAmt)}</th></tr>` : ''}</table>`
-      : `<table><tr><th>客戶</th><th>錶號</th><th class="num">上次度數</th><th class="num">這次度數</th><th class="num">用量（度）</th><th class="num">上個月</th><th class="num">金額</th><th>抄錶日</th><th>照片</th></tr>
-      ${meter.map(m => `<tr class="click" data-c="${m.customer_id}"><td><b>${esc(m.name)}</b>${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}<div class="muted">${esc(m.address || '')}</div></td><td>${esc(m.meter_no || '')}</td>
-        ${m.usage == null ? `<td colspan="3"><span class="pill accent">還沒抄</span></td><td class="num">${fmtDeg(m.prev_usage)}</td><td></td><td></td><td></td>`
-          : `<td class="num">${fmtDeg(m.from_reading)}</td><td class="num">${fmtDeg(m.to_reading)}</td><td class="num"><b>${fmtDeg(m.usage)}</b> ${diff(m.usage, m.prev_usage)}</td><td class="num">${fmtDeg(m.prev_usage)}</td><td class="num">${money(m.amount)}</td><td>${esc((m.read_at || '').slice(5, 10).replace('-', '/'))}</td>
+      : `<table><tr><th>客戶</th><th class="num">上次度數</th><th class="num">這次度數</th><th class="num">用量（度）</th><th class="num">公斤</th><th class="num">上個月（度）</th><th class="num">金額</th><th>記錄日</th><th>照片</th></tr>
+      ${meter.map(m => `<tr class="click" data-c="${m.customer_id}"><td><b>${esc(m.name)}</b>${m.billing_type === 'monthly' ? ' <span class="pill blue">月結</span>' : ''}<div class="muted">${esc(m.address || '')}</div></td>
+        ${m.usage == null ? `<td colspan="4"><span class="pill accent">還沒記</span></td><td class="num">${fmtDeg(m.prev_usage)}</td><td></td><td></td><td></td>`
+          : `<td class="num">${fmtDeg(m.from_reading)}</td><td class="num">${fmtDeg(m.to_reading)}</td><td class="num"><b>${fmtDeg(m.usage)}</b> ${diff(m.usage, m.prev_usage)}</td><td class="num">${m.kg == null ? '—' : fmtDeg(m.kg)}</td><td class="num">${fmtDeg(m.prev_usage)}</td><td class="num">${money(m.amount)}</td><td>${esc((m.read_at || '').slice(5, 10).replace('-', '/'))}</td>
           <td>${m.photo_id ? `<a href="/api/meter/readings/${m.photo_id}/photo" target="_blank"><img class="meter-thumb" src="/api/meter/readings/${m.photo_id}/photo" alt="錶" loading="lazy"></a>` : ''}</td>`}</tr>`).join('')
-        || '<tr><td class="muted" colspan="9">還沒有計流量的客人。到客戶資料把「收費方式」改成計流量。</td></tr>'}
-      ${read.length ? `<tr><th colspan="4">合計</th><th class="num">${fmtDeg(mUse)}</th><th></th><th class="num">${money(mAmt)}</th><th colspan="2"></th></tr>` : ''}</table>`}</div>`;
+        || '<tr><td class="muted" colspan="9">還沒有計量的客人。到客戶頁「計量」卡片填每公斤單價就會出現。</td></tr>'}
+      ${read.length ? `<tr><th colspan="3">合計</th><th class="num">${fmtDeg(mUse)}</th><th class="num">${fmtDeg(mKg)}</th><th></th><th class="num">${money(mAmt)}</th><th colspan="2"></th></tr>` : ''}</table>`}</div>`;
   view.onclick = e => {
     if (e.target.closest('a')) return;
     const mb = e.target.closest('[data-mon]'); if (mb) return usagePage(view, mb.dataset.mon);

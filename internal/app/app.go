@@ -142,9 +142,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	seedCustomerPrices(db)
-	// 計流量（抄錶）收費
+	// 計量（度數）收費
 	if err := ensureMeter(db); err != nil {
-		return fmt.Errorf("建立抄錶資料表失敗: %w", err)
+		return fmt.Errorf("建立度數資料表失敗: %w", err)
 	}
 	// 存氣紀錄、調漲紀錄
 	if err := ensureExtras(db); err != nil {
