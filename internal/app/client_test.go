@@ -209,3 +209,14 @@ func TestSetupChooseClient(t *testing.T) {
 		t.Fatal("沒存成分機")
 	}
 }
+
+// 外面網址回 502（Cloudflare 通、主電腦程式沒開）：寫清楚原因。
+func TestClientMainDown(t *testing.T) {
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(502) }))
+	defer down.Close()
+	cl := &Client{St: &Station{Mode: "client", Server: down.URL}, lanTimeout: time.Second, publicTimeout: time.Second, discoverTargets: []string{}}
+	cl.Pick(context.Background())
+	if e, _ := cl.status()["error"].(string); !strings.Contains(e, "沒有回應") {
+		t.Fatalf("原因不清楚：%q", e)
+	}
+}

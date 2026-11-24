@@ -366,6 +366,24 @@ function connectPage() {
   connectTimer = setTimeout(poll, 3000);
 }
 
+// 分機的登入畫面：連不到主電腦時直接寫原因，連上了自動消失
+let linkTimer;
+async function watchLink() {
+  clearTimeout(linkTimer);
+  const el = $('#linkWarn'); if (!el) return;
+  const st = await loadStation();
+  if (!st || st.mode !== 'client' || st.via) { el.innerHTML = ''; if (st && st.via && el.dataset.was) { delete el.dataset.was; toast('連上主電腦了', 'ok'); } }
+  else {
+    el.dataset.was = '1';
+    el.innerHTML = `<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">⚠ 連不到主電腦，現在不能登入</b>
+      <div class="muted" style="margin:4px 0">${esc(st.error || '')}</div>
+      <div class="muted">請確認店裡的主電腦開著、瓦斯行程式有打開（右下角有小圖示）。連上後這裡會自動消失。</div>
+      <p class="row"><button class="ghost" id="lwCode">換一組連線碼</button></p></div>`;
+    $('#lwCode', el).onclick = () => { clearTimeout(linkTimer); connectPage(); };
+  }
+  if (st && st.mode === 'client') linkTimer = setTimeout(watchLink, 3000);
+}
+
 async function stationSettingsCard(sys, admin) {
   const st = await loadStation();
   if (!st) return '';
@@ -582,8 +600,9 @@ async function showLogin() {
   let setup = { needed: false };
   try { setup = await api('GET', '/api/setup'); } catch { }
   document.body.innerHTML = `<main class="center"><h2><img src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:12px;vertical-align:middle;margin-right:8px">瓦斯行管理系統</h2>
-    <div class="card" id="box"></div></main><div id="toast"></div>`;
+    <div id="linkWarn"></div><div class="card" id="box"></div></main><div id="toast"></div>`;
   const box = $('#box');
+  watchLink();
   const accs = store.get('accounts', []) || [];
   if (setup.needed && !setup.local) { box.innerHTML = '<p>系統還沒設定，請先在店裡電腦打開程式建立老闆帳號。</p>'; return; }
   box.innerHTML = setup.needed ? `
