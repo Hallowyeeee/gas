@@ -2,6 +2,7 @@ package app
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -20,23 +21,63 @@ type Station struct {
 	Popup    *bool    `json:"popup,omitempty"`     // 來電時跳出客人資料（每台自己設定，預設開）
 }
 
-const DefaultServer = "https://gas.hallowyeeee.com"
-
 func StationPath(dir string) string { return filepath.Join(dir, "station.json") }
 
-// LoadStation 讀這台電腦的設定；沒有檔案就當主電腦。
+// LoadStation 讀這台電腦的設定。沒有檔案時 Mode 是空的（還沒選），由程式決定：
+// 已經有資料庫 = 舊的主電腦；全新安裝 = 第一次打開時問「主電腦還是分機」。
 func LoadStation(path string) *Station {
-	st := &Station{Mode: "main"}
-	if b, err := os.ReadFile(path); err == nil {
-		json.Unmarshal(b, st)
+	st := &Station{}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return st
 	}
+	json.Unmarshal(b, st)
 	if st.Mode != "client" {
 		st.Mode = "main"
 	}
-	if st.Mode == "client" && st.Server == "" {
-		st.Server = DefaultServer
-	}
 	return st
+}
+
+// ---------------------------------------------------------------------
+// 連線碼：外面的分機第一次連時輸入，裡面是主電腦的外面網址和身分碼。
+// ---------------------------------------------------------------------
+
+const codePrefix = "GAS-"
+
+type connCode struct {
+	U  string `json:"u"`
+	ID string `json:"id"`
+}
+
+func makeCode(publicURL, id string) string {
+	if publicURL == "" {
+		return ""
+	}
+	b, _ := json.Marshal(connCode{publicURL, id})
+	return codePrefix + base64.RawURLEncoding.EncodeToString(b)
+}
+
+// parseCode 看懂連線碼；也接受直接打網址（例如 店名.hallowyeeee.com）。
+func parseCode(s string) (url, id string, err error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", "", nil
+	}
+	if strings.HasPrefix(strings.ToUpper(s), codePrefix) {
+		b, e := base64.RawURLEncoding.DecodeString(strings.TrimRight(s[len(codePrefix):], "="))
+		var c connCode
+		if e != nil || json.Unmarshal(b, &c) != nil || c.U == "" {
+			return "", "", bad("連線碼不對，請從主電腦「設定 → 這台電腦」重新複製")
+		}
+		return c.U, c.ID, nil
+	}
+	if strings.ContainsAny(s, " \t") || !strings.Contains(s, ".") {
+		return "", "", bad("請貼上主電腦的連線碼（GAS- 開頭）")
+	}
+	if !strings.Contains(s, "://") {
+		s = "https://" + s
+	}
+	return strings.TrimRight(s, "/"), "", nil
 }
 
 func (s *Station) Save(path string) error {
@@ -50,14 +91,14 @@ func (s *Station) PopupOn() bool { return s == nil || s.Popup == nil || *s.Popup
 func (s *Station) view() map[string]any {
 	return map[string]any{
 		"mode": s.Mode, "server": s.Server, "manual_ip": s.ManualIP, "popup": s.PopupOn(),
-		"version": Version,
+		"server_id": s.ServerID, "version": Version,
 	}
 }
 
 // stationInput 畫面送來要改的設定。
 type stationInput struct {
 	Mode     *string `json:"mode"`
-	Server   *string `json:"server"`
+	Server   *string `json:"server"` // 連線碼或網址
 	ManualIP *string `json:"manual_ip"`
 	Popup    *bool   `json:"popup"`
 }
@@ -71,22 +112,17 @@ func (s *Station) apply(in stationInput) (bool, error) {
 		}
 		s.Mode = *in.Mode
 		changed = true
-		if s.Mode == "client" && s.Server == "" {
-			s.Server = DefaultServer
-		}
 	}
-	if in.Server != nil {
-		v := strings.TrimRight(strings.TrimSpace(*in.Server), "/")
-		if v == "" {
-			v = DefaultServer
+	if in.Server != nil && strings.TrimSpace(*in.Server) != "" {
+		u, id, err := parseCode(*in.Server)
+		if err != nil {
+			return false, err
 		}
-		if !strings.Contains(v, "://") {
-			v = "https://" + v
-		}
-		if v != s.Server {
-			s.Server = v
-			s.ServerID = "" // 換主電腦了，身分碼重新抓
-			s.LAN = nil
+		if u != s.Server || (id != "" && id != s.ServerID) {
+			if id != s.ServerID {
+				s.LAN = nil // 換一台主電腦了，店內位址重新找
+			}
+			s.Server, s.ServerID = u, id
 		}
 	}
 	if in.ManualIP != nil {
@@ -117,7 +153,8 @@ func (a *App) serverID() string {
 
 // handleStationInfo 分機用來找主電腦：回傳身分碼和店裡直連的位址。不用登入，不含任何客戶資料。
 func (a *App) handleStationInfo(w http.ResponseWriter, r *http.Request) (any, error) {
-	return map[string]any{"id": a.serverID(), "lan": lanAddresses(a.Port), "version": Version}, nil
+	pub, _ := a.Tunnel.Info()
+	return map[string]any{"id": a.serverID(), "lan": lanAddresses(a.Port), "public": pub, "version": Version}, nil
 }
 
 // handleLocalStation 主電腦自己的「這台電腦」設定（只有本機程式視窗能改）。
@@ -128,6 +165,8 @@ func (a *App) handleLocalStation(w http.ResponseWriter, r *http.Request) (any, e
 	if r.Method == http.MethodGet {
 		v := a.Station.view()
 		v["lan"] = lanAddresses(a.Port)
+		pub, _ := a.Tunnel.Info()
+		v["public"], v["code"] = pub, makeCode(pub, a.serverID())
 		return v, nil
 	}
 	var in stationInput

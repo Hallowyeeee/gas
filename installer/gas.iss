@@ -9,7 +9,7 @@
 AppId={{6C1F3B2A-9D4E-4F1B-8A51-7E2B0C9D3A11}
 AppName=瓦斯行管理系統
 AppVersion={#AppVersion}
-AppPublisher=新福春進瓦斯聯合配送
+AppPublisher=瓦斯行管理系統
 DefaultDirName=C:\瓦斯行
 DisableProgramGroupPage=yes
 DisableDirPage=auto
@@ -39,17 +39,10 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
 DesktopIcon=在桌面建立捷徑
-AutoStart=開機自動啟動（建議，師傅才隨時收得到單）
+AutoStart=開機自動啟動（建議）
 Launch=現在打開瓦斯行管理系統
-StationGroup=這台電腦是：
-StationMain=主電腦（資料放這台、接來電盒，要一直開著）
-StationClient=分機（連到店裡的主電腦，自己不放資料）
-Firewall=讓店裡其他電腦連進來（Windows 會問一次「是否允許」，請按「是」）
 
 [Tasks]
-Name: "mainpc"; Description: "{cm:StationMain}"; GroupDescription: "{cm:StationGroup}"; Flags: exclusive
-Name: "mainpc\firewall"; Description: "{cm:Firewall}"
-Name: "clientpc"; Description: "{cm:StationClient}"; GroupDescription: "{cm:StationGroup}"; Flags: exclusive unchecked
 Name: "desktopicon"; Description: "{cm:DesktopIcon}"
 Name: "autostart"; Description: "{cm:AutoStart}"
 
@@ -65,10 +58,8 @@ Name: "{autodesktop}\瓦斯行管理系統"; Filename: "{app}\gas.exe"; WorkingD
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GasShop"; ValueData: """{app}\gas.exe"" -tray"; Flags: uninsdeletevalue; Tasks: autostart
 
+; 第一次打開程式時會問「這台是主電腦還是分機」，選主電腦會自動打開防火牆（Windows 會問一次）。
 [Run]
-Filename: "{app}\gas.exe"; Parameters: "-station main"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; Tasks: mainpc
-Filename: "{app}\gas.exe"; Parameters: "-station client"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; Tasks: clientpc
-Filename: "{sys}\cmd.exe"; Parameters: "/c netsh advfirewall firewall delete rule name=GasShop & netsh advfirewall firewall add rule name=GasShop dir=in action=allow protocol=TCP localport=8080 remoteip=localsubnet profile=any"; Verb: "runas"; Flags: shellexec runhidden waituntilterminated; Tasks: mainpc\firewall
 Filename: "{app}\gas.exe"; Description: "{cm:Launch}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent
 
 [UninstallRun]
