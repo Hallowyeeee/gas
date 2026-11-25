@@ -170,6 +170,12 @@ func ParseLegacyPage(src string) (*LegacyPage, error) {
 	if !found["客戶編號"] || p.LegacyID == "" {
 		return nil, errNotCustomerPage
 	}
+	// 「客戶資料管理系統」那一頁（不是訂單頁）：電話、地址在輸入框裡
+	for name, dst := range map[string]*string{"customer_tel": &p.Phone, "customer_address": &p.Address, "customer_name": &p.Name} {
+		if strings.TrimSpace(*dst) == "" {
+			*dst = cleanText(inputValue(doc, name))
+		}
+	}
 
 	// 2. 規格／欠桶數量／累計購買／銷售價格（同一張表，一欄一個規格）
 	for _, t := range tables {
@@ -585,6 +591,30 @@ func areaOf(addr string) string {
 			if r[i] == mark {
 				return string(r[start : i+1])
 			}
+		}
+	}
+	return ""
+}
+
+// inputValue 找 <input name=...> 的值（找不到回空字串）。
+func inputValue(n *html.Node, name string) string {
+	if n.Type == html.ElementNode && n.DataAtom == atom.Input {
+		var nm, v string
+		for _, a := range n.Attr {
+			switch a.Key {
+			case "name":
+				nm = a.Val
+			case "value":
+				v = a.Val
+			}
+		}
+		if nm == name && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if v := inputValue(c, name); v != "" {
+			return v
 		}
 	}
 	return ""

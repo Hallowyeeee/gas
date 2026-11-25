@@ -126,3 +126,19 @@ func TestParseLegacyPageHiddenPhone(t *testing.T) {
 		t.Fatal("應該從 customer_tel 找到電話並提醒", p.Phone, p.Warnings)
 	}
 }
+
+// 「客戶資料管理系統」那一頁：資料都在輸入框裡
+func TestParseLegacyCustomerPage(t *testing.T) {
+	src := `<html><body><table>
+<tr><td>客戶編號</td><td><input name="customer_id" value="73476"> 73476</td><td>客戶名稱</td><td><input name="customer_name" value="測試排骨"></td></tr>
+<tr><td>送貨住址</td><td><input name="zip" value=""><input name="customer_address" value="中壢區測試路3號"></td>
+<td id="cPhone"><input type="button" value="客戶電話"></td><td><input name="customer_tel" value="4664699"></td></tr>
+</table></body></html>`
+	p, err := ParseLegacyPage(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.LegacyID != "73476" || p.Name != "測試排骨" || p.Phone != "4664699" || p.Address != "中壢區測試路3號" {
+		t.Fatalf("讀錯：%+v", p)
+	}
+}
