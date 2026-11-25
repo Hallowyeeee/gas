@@ -366,6 +366,63 @@ function connectPage() {
   connectTimer = setTimeout(poll, 3000);
 }
 
+// 登入前也能打開的「這台電腦設定」：看現在是主電腦還是分機、連到哪裡，可以改
+async function stationPage() {
+  clearTimeout(connectTimer); clearTimeout(linkTimer);
+  const st = await loadStation(); if (!st) return route();
+  const isClient = st.mode === 'client';
+  const via = !isClient ? '' : st.via === 'lan' ? `<span class="pill ok">店內直連</span> ${esc(st.address)}`
+    : st.via === 'public' ? `<span class="pill blue">走外面網路</span> ${esc(st.address)}`
+    : `<span class="pill bad">連不到</span> <span class="muted">${esc(st.error || '')}</span>`;
+  const box = gatePage(`<h3 style="margin-top:0">⚙ 這台電腦設定</h3>
+    <div>這台現在是：<b>${isClient ? '分機' : '主電腦'}</b></div>
+    ${isClient ? `<div style="margin-top:6px">連線：${via}</div>
+      <div class="muted" style="margin-top:4px">要連的主電腦：${esc(st.server || '還沒設定（在店裡會自動找）')}</div>
+      <label>貼上主電腦的連線碼（主電腦「設定 → 這台電腦 → 複製連線碼」）</label>
+      <input id="spCode" placeholder="GAS- 開頭的一串字，或直接打網址" autocomplete="off">
+      <label>主電腦在店裡的位址（店裡自動找不到時才填，例如 192.168.1.10）</label>
+      <input id="spIP" value="${esc(st.manual_ip || '')}" placeholder="留空 = 自動找">
+      <p class="row"><button class="primary" id="spSave">儲存並重新連線</button></p>
+      <hr><p class="row"><button class="danger" id="spMain">改成主電腦</button></p>
+      <div class="muted">只有這家店的第一台、或要換主電腦時才選。這台會開始放自己的資料。</div>`
+    : `<div class="muted" style="margin-top:4px">資料庫在這台。如果這台其實不是主電腦，請改成分機。</div>
+      <hr><p class="row"><button class="danger" id="spClient">改成分機</button></p>
+      <div class="muted">改成分機後，這台的資料會留著但不再使用，改連店裡的主電腦。</div>`}
+    <p class="row" style="margin-top:12px"><button class="ghost" id="spBack">← 回登入畫面</button></p>`);
+  $('#spBack', box).onclick = () => route();
+  const save = $('#spSave', box); if (save) save.onclick = async () => {
+    save.disabled = true; toast('連線中…');
+    try { const d = await putStation({ server: $('#spCode').value, manual_ip: $('#spIP').value }); S.station = d.status; toast(S.station.via ? '連上了' : (S.station.error || '還是連不到'), S.station.via ? 'ok' : 'bad'); stationPage(); }
+    catch (e) { toast(e.message, 'bad'); save.disabled = false; }
+  };
+  const toMain = $('#spMain', box); if (toMain) toMain.onclick = async () => {
+    if (!confirm('確定這台改成主電腦？店裡已經有主電腦的話不要選。\n接著 Windows 會問「是否允許」，請按「是」。')) return;
+    try { await putStation({ mode: 'main' }); box.innerHTML = '<p>設定好了，程式會自動重新打開，請稍等…</p>'; } catch (e) { toast(e.message, 'bad'); }
+  };
+  const toClient = $('#spClient', box); if (toClient) toClient.onclick = async () => {
+    if (!confirm('確定這台改成分機？之後資料都看店裡的主電腦。')) return;
+    try { await putStation({ mode: 'client' }); box.innerHTML = '<p>設定好了，程式會自動重新打開，請稍等…</p>'; } catch (e) { toast(e.message, 'bad'); }
+  };
+}
+
+// 分機的登入畫面：連不到主電腦時直接寫原因，連上了自動消失
+let linkTimer;
+async function watchLink() {
+  clearTimeout(linkTimer);
+  const el = $('#linkWarn'); if (!el) return;
+  const st = await loadStation();
+  if (!st || st.mode !== 'client' || st.via) { el.innerHTML = ''; if (st && st.via && el.dataset.was) { delete el.dataset.was; toast('連上主電腦了', 'ok'); } }
+  else {
+    el.dataset.was = '1';
+    el.innerHTML = `<div class="card" style="border-color:var(--bad)"><b style="color:var(--bad)">⚠ 連不到主電腦，現在不能登入</b>
+      <div class="muted" style="margin:4px 0">${esc(st.error || '')}</div>
+      <div class="muted">請確認店裡的主電腦開著、瓦斯行程式有打開（右下角有小圖示）。連上後這裡會自動消失。</div>
+      <p class="row"><button class="ghost" id="lwCode">換一組連線碼</button></p></div>`;
+    $('#lwCode', el).onclick = () => { clearTimeout(linkTimer); connectPage(); };
+  }
+  if (st && st.mode === 'client') linkTimer = setTimeout(watchLink, 3000);
+}
+
 async function stationSettingsCard(sys, admin) {
   const st = await loadStation();
   if (!st) return '';
@@ -582,8 +639,11 @@ async function showLogin() {
   let setup = { needed: false };
   try { setup = await api('GET', '/api/setup'); } catch { }
   document.body.innerHTML = `<main class="center"><h2><img src="/icon-192.png" alt="" style="width:56px;height:56px;border-radius:12px;vertical-align:middle;margin-right:8px">瓦斯行管理系統</h2>
-    <div class="card" id="box"></div></main><div id="toast"></div>`;
+    <div id="linkWarn"></div><div class="card" id="box"></div>
+    ${S.station ? '<p style="text-align:center"><button class="ghost" id="toStation">⚙ 這台電腦設定（主電腦／分機、要連哪一台）</button></p>' : ''}</main><div id="toast"></div>`;
   const box = $('#box');
+  const ts = $('#toStation'); if (ts) ts.onclick = () => { clearTimeout(linkTimer); stationPage(); };
+  watchLink();
   const accs = store.get('accounts', []) || [];
   if (setup.needed && !setup.local) { box.innerHTML = '<p>系統還沒設定，請先在店裡電腦打開程式建立老闆帳號。</p>'; return; }
   box.innerHTML = setup.needed ? `

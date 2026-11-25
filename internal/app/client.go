@@ -125,6 +125,9 @@ func (c *Client) fetchInfo(ctx context.Context, base string, timeout time.Durati
 	if resp.StatusCode == http.StatusNotFound && strings.Contains(resp.Header.Get("Content-Type"), "json") {
 		return nil, errOldMain // 是瓦斯行，只是主電腦還沒更新到有分機功能的版本
 	}
+	if resp.StatusCode == http.StatusBadGateway || resp.StatusCode == http.StatusServiceUnavailable || resp.StatusCode == 530 {
+		return nil, errMainDown // Cloudflare 有通，但主電腦的程式沒回應
+	}
 	if resp.StatusCode != 200 || json.NewDecoder(resp.Body).Decode(&in) != nil || in.ID == "" {
 		return nil, errNotGas
 	}
@@ -132,6 +135,7 @@ func (c *Client) fetchInfo(ctx context.Context, base string, timeout time.Durati
 }
 
 var errOldMain = &apiError{http.StatusNotFound, "主電腦還是舊版"}
+var errMainDown = &apiError{http.StatusBadGateway, "外面網址有通，但店裡主電腦的瓦斯行程式沒有回應（主電腦關機、程式沒開、或正在更新）"}
 var errNotGas = &apiError{http.StatusBadGateway, "這個位址不是瓦斯行主電腦"}
 
 // lanCandidates 店內可以試的位址：手動填的優先，再來是主電腦告訴我們的。
@@ -212,7 +216,11 @@ func (c *Client) Pick(ctx context.Context) {
 		return
 	}
 	if err != nil {
-		c.set("", "", "連不到主電腦（主電腦要開著、有網路）："+shortErr(err))
+		msg := "連不到主電腦（主電腦要開著、有網路）：" + shortErr(err)
+		if err == errMainDown {
+			msg = err.Error()
+		}
+		c.set("", "", msg)
 		return
 	}
 	if wantID != "" && info.ID != wantID {
