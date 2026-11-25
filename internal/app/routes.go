@@ -146,6 +146,14 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("POST /api/push/test", a.route(a.pushTest))
 	m.HandleFunc("GET /api/push/status", a.route(a.pushStatus, office...))
 
+	m.HandleFunc("GET /api/cylinders", a.route(a.listCylinders))
+	m.HandleFunc("GET /api/cylinders/summary", a.route(a.cylinderSummary))
+	m.HandleFunc("GET /api/cylinders/lookup", a.route(a.lookupCylinder))
+	m.HandleFunc("POST /api/cylinders", a.createCylinder)
+	m.HandleFunc("GET /api/cylinders/{id}", a.route(a.getCylinder))
+	m.HandleFunc("PUT /api/cylinders/{id}", a.route(a.updateCylinder))
+	m.HandleFunc("POST /api/cylinders/{id}/relabel", a.route(a.relabelCylinder))
+	m.HandleFunc("GET /api/cylinders/{id}/photo", a.cylinderPhoto)
 	m.HandleFunc("GET /api/meter/customers", a.route(a.meterCustomers))
 	m.HandleFunc("GET /api/meter/readings", a.route(a.listMeterReadings))
 	m.HandleFunc("POST /api/meter/readings", a.createMeterReading)
@@ -174,7 +182,12 @@ func (a *App) Handler() http.Handler {
 			if _, err := fs.Stat(a.Static, p); err != nil {
 				r.URL.Path = "/"
 			}
-			w.Header().Set("Cache-Control", "no-cache")
+			if strings.HasPrefix(p, "vendor/") {
+				// 辨識工具很大、資料夾名稱有版本號，手機下載一次就一直用
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache")
+			}
 			files.ServeHTTP(w, r)
 		})
 	}

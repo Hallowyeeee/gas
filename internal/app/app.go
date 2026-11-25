@@ -150,6 +150,10 @@ func migrate(db *sql.DB) error {
 	if err := ensureExtras(db); err != nil {
 		return fmt.Errorf("建立存氣、調漲紀錄失敗: %w", err)
 	}
+	// 鋼瓶清單
+	if _, err := db.Exec(gasdb.Cylinders); err != nil {
+		return fmt.Errorf("建立鋼瓶清單失敗: %w", err)
+	}
 	return nil
 }
 

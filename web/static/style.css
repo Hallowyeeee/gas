@@ -299,3 +299,26 @@ dialog.wide { width:min(1100px, 96vw); }
 .job-lines .row { padding:2px 0; }
 .job-total { border-top:1px dashed var(--line); margin-top:4px; padding-top:4px !important; }
 .order-hist { margin-top:14px; }
+
+/* 拍照辨識：掃條碼、框選數字 */
+dialog.scan-dlg { width:min(96vw,640px); }
+.scan-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; font-size:18px; }
+.scan-cam { position:relative; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:4/3; }
+.scan-cam video { width:100%; height:100%; object-fit:cover; display:block; }
+.scan-aim { position:absolute; left:10%; right:10%; top:30%; bottom:30%; border:3px solid #ffd43b; border-radius:8px; box-shadow:0 0 0 999px rgba(0,0,0,.35); }
+.scan-btns button { font-size:18px; padding:12px 18px; }
+.crop-wrap { position:relative; text-align:center; user-select:none; }
+.crop-wrap canvas { max-width:100%; border-radius:8px; cursor:crosshair; touch-action:none; }
+.crop-box { position:absolute; border:3px solid #ffd43b; background:rgba(255,212,59,.15); pointer-events:none; }
+.info-btn { border:none; background:none; color:var(--blue); font-size:18px; padding:0 4px; cursor:pointer; vertical-align:middle; }
+.ocr-bar { margin-top:8px; padding:10px; border-radius:8px; background:var(--blue-soft); line-height:1.8; }
+input.ocr-filled { outline:3px solid #ffd43b; }
+/* 鋼瓶 */
+.cyl-big { font-size:26px; font-weight:700; letter-spacing:1px; }
+.due-bad { background:var(--bad-soft); color:var(--bad); }
+.due-soon { background:#fff4e0; color:#b35c00; }
+@media (prefers-color-scheme: dark) { .due-soon { background:#3a2a10; color:#ffb454; } }
+.datesel { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.datesel select { font-size:20px; padding:8px; width:auto; }
+.sizebtns button { min-width:58px; }
+a.cyl-warn { display:block; text-decoration:none; color:var(--text); }

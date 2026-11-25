@@ -501,7 +501,7 @@ const SECTION = {
   dispatch: 'dispatch', today: 'dispatch', orders: 'dispatch', order: 'dispatch',
   customers: 'customers',
   money: 'money', dashboard: 'money', reconcile: 'money', usage: 'money',
-  stock: 'stock', products: 'stock', stocklist: 'stock',
+  stock: 'stock', products: 'stock', stocklist: 'stock', cylinders: 'stock',
 };
 const SLOT = { am: '上午', pm: '下午', eve: '晚上' };
 const SLOTS = ['am', 'pm', 'eve'];
@@ -537,7 +537,7 @@ async function route(soft) {
   if (stationGate()) return;
   if (!S.me) return showLogin();
   const driver = S.me.role === 'driver';
-  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '度數']] : [])] : OFFICE_NAV;
+  const nav = driver ? [['#/my', '我的單'], ['#/my-done', '今天已送'], ...(chargeMode() !== 'cylinder' ? [['#/meter', '度數']] : []), ['#/cyl', '鋼瓶']] : OFFICE_NAV;
   const shellKey = S.me.role + S.me.id + chargeMode();
   if (lastShell !== shellKey) {
     const first = !lastShell;
@@ -556,13 +556,13 @@ async function route(soft) {
   const gear = $('.gear'); if (gear) gear.classList.toggle('on', page === 'settings');
   const view = $('#view');
   const views = driver
-    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone, 'my-help': driverHelp, meter: driverMeter }
+    ? { my: arg ? driverDeliver : driverJobs, 'my-done': driverDone, 'my-help': driverHelp, meter: driverMeter, cyl: driverCylinders }
     : {
       home: officeNew, new: officeNew, calls: callHistory,
       dispatch: hubDispatch, today: todayBoard, orders: ordersQuery, order: orderDetail,
       customers: arg ? customerDetail : customerList,
       money: hubMoney, dashboard: dashboardPage, reconcile, usage: usagePage,
-      stock: hubStock, products: productList, stocklist: stockList,
+      stock: hubStock, products: productList, stocklist: stockList, cylinders: cylinderPage,
       settings,
     };
   const fn = views[page] || (driver ? driverJobs : officeNew);
@@ -655,11 +655,13 @@ async function hubMoney(view) {
 }
 
 async function hubStock(view) {
-  const [products, stock] = await Promise.all([data('/api/products?all=1'), data('/api/stock')]);
+  const [products, stock, cyl] = await Promise.all([data('/api/products?all=1'), data('/api/stock'), data('/api/cylinders/summary').catch(() => ({ total: 0 }))]);
   const low = stock.filter(x => x.is_low).length;
+  const due = (cyl.overdue || 0) + (cyl.soon || 0);
   view.innerHTML = cardGrid('商品庫存', '', [
     { href: '#/products', icon: '🏷️', title: '商品', desc: '瓦斯、空瓶、爐具、耗材的價格和上架', count: products.filter(p => p.active).length },
-    { href: '#/stocklist', icon: '🛢️', title: '庫存', desc: '每樣東西還剩多少，低於提醒數量會標紅', count: low ? '低 ' + low : '', hl: low > 0 },
+    { href: '#/stocklist', icon: '📦', title: '庫存', desc: '每樣東西還剩多少，低於提醒數量會標紅', count: low ? '低 ' + low : '', hl: low > 0 },
+    { href: cyl.overdue ? '#/cylinders/overdue' : cyl.soon ? '#/cylinders/soon' : '#/cylinders', icon: '🛢️', title: '鋼瓶', desc: '容器號碼、下次檢驗期限；掃貼紙條碼登記，快到期、過期會提醒', count: due ? `${cyl.overdue ? '過期 ' + cyl.overdue : ''}${cyl.overdue && cyl.soon ? '・' : ''}${cyl.soon ? '快到期 ' + cyl.soon : ''}` : (cyl.total || ''), hl: due > 0 },
   ]);
 }
 
@@ -953,6 +955,7 @@ async function officeNew(view) {
   view.innerHTML = `<div class="home-grid"><div class="home-left">
       <section class="card callstack" id="calls" hidden></section>
       <section class="card" id="unhandled" hidden></section>
+      <a class="card cyl-warn" id="cylwarn" hidden></a>
       <section class="card"><label style="margin-top:0">找客戶（電話、名字、地址、編號）</label>
         <input id="q" placeholder="輸入後按 Enter 選第一個" autocomplete="off">
         <div class="results" id="results"></div>
@@ -964,6 +967,13 @@ async function officeNew(view) {
     officeNew(view);
   } });
   const renderMid = () => ot.renderMid();
+  // 鋼瓶快到期、過期的提醒
+  api('GET', '/api/cylinders/summary').then(c => {
+    const w = $('#cylwarn', view); if (!w || !(c.overdue || c.soon)) return;
+    w.href = c.overdue ? '#/cylinders/overdue' : '#/cylinders/soon';
+    w.innerHTML = `🛢️ 鋼瓶 ${c.overdue ? `<span class="pill due-bad">過期 ${c.overdue} 支</span>` : ''} ${c.soon ? `<span class="pill due-soon">30 天內到期 ${c.soon} 支</span>` : ''} <span class="muted">›</span>`;
+    w.hidden = false;
+  }).catch(() => { });
   const q = $('#q');
   q.focus();
   let timer;
@@ -2168,8 +2178,9 @@ function meterFormHTML(c) {
       <div style="margin-top:6px">上次度數 <b>${c.last_reading == null ? '沒有（這次當起始）' : fmtDeg(c.last_reading)}</b>${c.last_read_at ? ` <span class="muted">${esc(c.last_read_at.slice(0, 10))}</span>` : ''}</div></div>
     <label>這次錶上的度數</label><input name="reading" inputmode="decimal" required autocomplete="off" style="font-size:24px">
     <div class="meter-calc" id="mcalc"></div>
-    <label>📷 錶的照片 <span class="muted">（選填，客人有疑問時可以對）</span></label>
+    <label>📷 錶的照片 <span class="muted">（拍了會自動讀度數；客人有疑問時也可以對）</span> <button type="button" class="info-btn" data-paidinfo title="付費辨識說明">ⓘ</button></label>
     <input type="file" name="photo" accept="image/*" capture="environment"><div id="mphoto"></div>
+    <div class="ocr-bar" id="mocr" hidden></div>
     ${monthly ? '<p class="muted">月結客人：金額記到月底帳單，不用當場收。</p>' : `<label>當場收多少</label><input name="collected" type="number" inputmode="numeric" placeholder="沒收就留空">
       <div class="segment" id="mpay"><button type="button" class="on" data-m="cash">現金</button><button type="button" data-m="transfer">轉帳</button></div>`}
     <label>備註</label><input name="note" placeholder="例如：錶在後陽台">`;
@@ -2191,11 +2202,40 @@ function bindMeterForm(root, c, done) {
   };
   f.reading.oninput = calc;
   if (f.collected) f.collected.oninput = () => { f.collected.dataset.touched = 1; };
+  // 拍完照：手機自己讀度數（免費、不用網路），填進「這次度數」，師傅對一下再存
+  let img = null;
+  const bar = $('#mocr', root);
+  const fill = (v, how) => {
+    f.reading.value = v; f.reading.dispatchEvent(new Event('input', { bubbles: true }));
+    f.reading.classList.add('ocr-filled');
+    bar.innerHTML = `✅ ${how}讀到 <b>${fmtDeg(v)}</b>，<b>請對一下錶</b>，不對就直接改。 <button type="button" class="ghost" data-crop>✂️ 框選數字再讀</button>`;
+  };
+  const fail = msg => { bar.innerHTML = `<span class="price-none">${msg}</span> <button type="button" data-crop>✂️ 用手指框住數字</button> <span class="muted">或直接手打</span>`; };
+  const readAuto = async () => {
+    bar.hidden = false; bar.innerHTML = '🔍 讀度數中…（第一次要下載辨識工具，比較久）';
+    try {
+      const r = await Scan.readDigits(img);
+      const v = c.last_reading == null ? null : Scan.pickReading(r.runs, c.last_reading, c.prev_usage);
+      if (v != null) fill(v, '自動'); else fail(c.last_reading == null ? '第一次記度數，請用手指框住錶上的數字。' : '沒有自動讀到合理的度數。');
+    } catch (e) { fail('辨識工具打不開：' + e.message); }
+  };
+  bar.onclick = async e => {
+    if (!e.target.closest('[data-crop]') || !img) return;
+    const txt = await Scan.pickAndRead(img, '框住錶上的度數（黑色數字那排）').catch(err => { toast(err.message, 'bad'); return null; });
+    if (txt == null) return;
+    const v = Scan.pickReading([txt], c.last_reading, c.prev_usage) ?? (txt ? parseFloat(txt) : null);
+    if (v != null && !isNaN(v)) fill(v, '框選'); else fail('框的那塊也讀不出來，請手打。');
+  };
+  const info = $('[data-paidinfo]', root); if (info) info.onclick = () => Scan.paidInfo();
   f.photo.onchange = async () => {
     const file = f.photo.files[0]; if (!file) return;
     try { photo = await shrinkPhoto(file); $('#mphoto', root).innerHTML = `<img src="${photo}" class="meter-thumb big" alt="錶的照片">`; }
-    catch { toast('照片讀不到，再拍一次', 'bad'); }
+    catch { toast('照片讀不到，再拍一次', 'bad'); return; }
+    try { img = await Scan.fileToImage(file); } catch { img = null; }
+    if (img && !f.reading.value.trim()) readAuto();
+    else if (img) { bar.hidden = false; bar.innerHTML = `<button type="button" class="ghost" data-auto>🔍 從照片讀度數</button> <button type="button" class="ghost" data-crop>✂️ 框選數字</button>`; $('[data-auto]', bar).onclick = readAuto; }
   };
+  f.reading.addEventListener('input', e => { if (e.isTrusted) f.reading.classList.remove('ocr-filled'); });
   f.onsubmit = async e => {
     e.preventDefault();
     const v = parseFloat(f.reading.value);
@@ -2410,6 +2450,238 @@ async function usagePage(view, arg) {
 }
 
 // 電腦版快捷鍵：F2 記單
+// ---------------------------------------------------------------------
+// 鋼瓶清單：容器號碼、規格、下次檢驗期限；掃貼紙條碼找鋼瓶、拍貼紙登記
+// ---------------------------------------------------------------------
+const CYL_STATUS = { store: '店裡', customer: '在客人家', scrapped: '報廢' };
+const rocDate = d => d ? `${+d.slice(0, 4) - 1911}/${d.slice(5, 7)}${d.length > 7 ? '/' + d.slice(8, 10) : ''}` : '';
+function duePill(y) {
+  if (y.due_state === 'scrapped') return '<span class="pill">報廢</span>';
+  if (y.due_state === 'overdue') return `<span class="pill due-bad">過期 ${-y.days_left} 天，不能送出</span>`;
+  if (y.due_state === 'soon') return `<span class="pill due-soon">剩 ${y.days_left} 天到期</span>`;
+  return '<span class="pill ok">檢驗期限內</span>';
+}
+// 民國年／月／日 三個下拉（年份從民國 80 到今年 +10）
+function dateSelHTML(name, v, optional) {
+  const ty = new Date().getFullYear() - 1911;
+  const [y, m, d] = v ? [+v.slice(0, 4) - 1911, +v.slice(5, 7), +v.slice(8, 10)] : ['', '', ''];
+  const opt = (from, to, cur, unit) => (optional || !cur ? `<option value="">${unit}</option>` : '') +
+    Array.from({ length: to - from + 1 }, (_, i) => from + i).map(n => `<option value="${n}" ${n === cur ? 'selected' : ''}>${n}</option>`).join('');
+  return `<div class="datesel" data-date="${name}"><select data-p="y">${opt(80, ty + 10, y, '年')}</select>年
+    <select data-p="m">${opt(1, 12, m, '月')}</select>月<select data-p="d">${opt(1, 31, d, '日')}</select>日</div>`;
+}
+function readDateSel(root, name) {
+  const box = $(`[data-date="${name}"]`, root); if (!box) return undefined;
+  const g = p => $(`[data-p=${p}]`, box).value;
+  if (!g('y')) return '';
+  const y = +g('y') + 1911, m = g('m') || '1', d = g('d') || '1';
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+function cylinderFormHTML(y, office) {
+  const size = y.size_kg || '';
+  return `<label>貼紙條碼</label><div class="row"><input name="label_code" value="${esc(y.label_code || '')}" placeholder="按右邊掃" autocomplete="off" ${y.id ? 'readonly' : ''} style="flex:1">
+      ${y.id ? '' : '<button type="button" data-scanlabel>📷 掃</button>'}</div>
+    <label>📷 貼紙照片 <span class="muted">（拍了可以用手指框住號碼讀出來）</span> <button type="button" class="info-btn" data-paidinfo title="付費辨識說明">ⓘ</button></label>
+    <input type="file" name="photo" accept="image/*" capture="environment"><div data-photoprev>${y.has_photo ? `<img src="/api/cylinders/${y.id}/photo" class="meter-thumb big" alt="貼紙照片">` : ''}</div>
+    <label>容器號碼 <span class="muted">（鋼瓶本身的號碼，不會換）</span></label>
+    <div class="row"><input name="serial" value="${esc(y.serial || '')}" required autocomplete="off" style="flex:1;font-size:22px"><button type="button" data-crop="serial" hidden>✂️ 框選讀</button></div>
+    <label>下次檢驗期限（民國）</label>${dateSelHTML('next_due', y.next_due, false)}
+    <label>容器規格（公斤）</label>
+    <div class="segment sizebtns" data-size>${[4, 10, 16, 20, 50].map(n => `<button type="button" data-v="${n}" class="${+size === n ? 'on' : ''}">${n}</button>`).join('')}</div>
+    <label>容器實重（含閥，公斤） <span class="muted">選填</span></label>
+    <div class="row"><input name="tare_kg" inputmode="decimal" value="${y.tare_kg ?? ''}" style="flex:1"><button type="button" data-crop="tare_kg" hidden>✂️ 框選讀</button></div>
+    <label>定期檢驗日期（民國） <span class="muted">選填</span></label>${dateSelHTML('inspected_on', y.inspected_on, true)}
+    <label>現在在哪</label>
+    <div class="segment" data-status>${Object.entries(CYL_STATUS).map(([k, t]) => `<button type="button" data-v="${k}" class="${(y.status || 'store') === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+    ${office ? `<div data-custbox ${y.status === 'customer' ? '' : 'hidden'}><label>哪位客人</label>
+      <input name="cust_q" placeholder="打名字、電話找" value="${esc(y.customer_name || '')}" autocomplete="off"><div class="results" data-custres></div></div>` : ''}
+    <label>備註</label><input name="note" value="${esc(y.note || '')}">`;
+}
+function bindCylinderForm(root, y, office, done) {
+  const f = $('form', root);
+  let photo = '', img = null, custId = y.customer_id || null;
+  bindSegment(root);
+  const info = $('[data-paidinfo]', root); if (info) info.onclick = () => Scan.paidInfo();
+  const scan = $('[data-scanlabel]', root);
+  if (scan) scan.onclick = async () => { const v = await Scan.barcode('掃貼紙上的條碼'); if (v) f.label_code.value = v.toUpperCase(); };
+  f.photo.onchange = async () => {
+    const file = f.photo.files[0]; if (!file) return;
+    try { photo = await shrinkPhoto(file); $('[data-photoprev]', root).innerHTML = `<img src="${photo}" class="meter-thumb big" alt="貼紙照片">`; img = await Scan.fileToImage(file); }
+    catch { return toast('照片讀不到，再拍一次', 'bad'); }
+    $$('[data-crop]', root).forEach(b => b.hidden = false);
+    // 還沒有條碼就順便從照片找
+    if (!f.label_code.value && img) Scan.decodeImage(img).then(v => { if (v && !f.label_code.value) { f.label_code.value = v.toUpperCase(); toast('照片裡讀到條碼 ' + v, 'ok'); } }).catch(() => { });
+    if (!f.serial.value) toast('用「✂️ 框選讀」框住容器號碼，就會自動填', 'ok');
+  };
+  root.addEventListener('click', async e => {
+    const b = e.target.closest('[data-crop]'); if (!b || !img) return;
+    const name = b.dataset.crop;
+    const txt = await Scan.pickAndRead(img, name === 'serial' ? '框住「容器號碼」那串數字' : '框住「容器實重」的數字').catch(err => { toast(err.message, 'bad'); return null; });
+    if (txt == null) return;
+    if (!txt) return toast('那一塊讀不出來，請手打', 'bad');
+    f[name].value = txt; f[name].classList.add('ocr-filled'); toast('讀到 ' + txt + '，請對一下', 'ok');
+  });
+  const stat = $('[data-status]', root), custBox = $('[data-custbox]', root);
+  if (custBox) {
+    stat.addEventListener('click', () => setTimeout(() => { custBox.hidden = ($('.on', stat) || {}).dataset?.v !== 'customer'; }));
+    let t;
+    f.cust_q.oninput = () => { clearTimeout(t); custId = null; t = setTimeout(async () => {
+      const v = f.cust_q.value.trim(); const res = $('[data-custres]', root);
+      if (!v) { res.innerHTML = ''; return; }
+      const list = await api('GET', '/api/customers?limit=8&q=' + encodeURIComponent(v)).catch(() => []);
+      res.innerHTML = list.map(c => `<div class="result" data-cid="${c.id}" data-cname="${esc(c.name)}"><b>${esc(c.name)}</b> <span class="muted">${esc(c.address || '')}</span></div>`).join('');
+    }, 250); };
+    $('[data-custres]', root).onclick = e => { const r = e.target.closest('[data-cid]'); if (!r) return; custId = +r.dataset.cid; f.cust_q.value = r.dataset.cname; $('[data-custres]', root).innerHTML = ''; };
+  }
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const next = readDateSel(root, 'next_due');
+    if (!f.serial.value.trim()) return toast('請填容器號碼', 'bad');
+    if (!next) return toast('請選下次檢驗期限', 'bad');
+    const status = ($('.on', stat) || {}).dataset?.v || 'store';
+    const sizeBtn = $('[data-size] .on', root);
+    const body = {
+      serial: f.serial.value.trim(), next_due: next, inspected_on: readDateSel(root, 'inspected_on'),
+      size_kg: sizeBtn ? +sizeBtn.dataset.v : 0, tare_kg: parseFloat(f.tare_kg.value) || 0, status, note: f.note.value.trim(),
+    };
+    if (status === 'customer' && custId) body.customer_id = custId;
+    if (!y.id) { body.label_code = f.label_code.value.trim(); body.photo = photo; }
+    const btn = $('button.primary, button.ok', f); if (btn) btn.disabled = true;
+    try {
+      const r = await api(y.id ? 'PUT' : 'POST', y.id ? '/api/cylinders/' + y.id : '/api/cylinders', body);
+      toast(y.id ? '已存' : `已登記容器號碼 ${r.serial}`, 'ok');
+      done && done(r);
+    } catch (err) { if (btn) btn.disabled = false; toast(err.network ? '沒連線，鋼瓶登記要連上店裡電腦才能存' : err.message, 'bad'); }
+  };
+}
+// 一支鋼瓶的卡片（掃到條碼後顯示）
+function cylinderCardHTML(y, by) {
+  return `<div class="card ${y.due_state === 'overdue' ? 'due-bad' : ''}">
+    <div class="row between"><span class="cyl-big">${esc(y.serial)}</span>${duePill(y)}</div>
+    ${by === 'old_label' ? '<p class="price-none">這是換掉的舊貼紙，這支鋼瓶已經換新貼紙了。</p>' : ''}
+    <div>下次檢驗期限 <b>${rocDate(y.next_due)}</b>・${y.size_kg ? fmtDeg(y.size_kg) + ' 公斤' : '規格未填'}・${CYL_STATUS[y.status] || ''}${y.customer_name ? '（' + esc(y.customer_name) + '）' : ''}</div>
+    <div class="muted">貼紙條碼 ${esc(y.label_code || '沒有')}${y.tare_kg ? '・實重 ' + fmtDeg(y.tare_kg) : ''}${y.inspected_on ? '・定期檢驗 ' + rocDate(y.inspected_on) : ''}</div>
+    <p class="row"><button type="button" data-edit="${y.id}">✏️ 改資料／狀態</button><button type="button" data-relabel="${y.id}">🏷️ 換新貼紙</button></p></div>`;
+}
+async function cylinderEditDialog(id, office, done) {
+  const y = await api('GET', '/api/cylinders/' + id);
+  const dlg = document.createElement('dialog'); document.body.appendChild(dlg);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.innerHTML = `<form><h2 style="margin-top:0">鋼瓶 ${esc(y.serial)} ${duePill(y)}</h2>${cylinderFormHTML(y, office)}
+    ${y.old_labels && y.old_labels.length ? `<p class="muted">換過的貼紙：${y.old_labels.map(l => esc(l.label_code) + (l.next_due ? '（期限 ' + rocDate(l.next_due) + '）' : '')).join('、')}</p>` : ''}
+    <p class="row"><button class="primary">存檔</button><button type="button" data-close>取消</button></p></form>`;
+  $('[data-close]', dlg).onclick = () => dlg.close();
+  bindCylinderForm(dlg, y, office, r => { dlg.close(); done && done(r); });
+  dlg.showModal();
+}
+// 換新貼紙：掃新條碼、選新的下次檢驗期限
+async function relabelDialog(id, done) {
+  const y = await api('GET', '/api/cylinders/' + id);
+  const dlg = document.createElement('dialog'); document.body.appendChild(dlg);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.innerHTML = `<form><h2 style="margin-top:0">🏷️ 換新貼紙：${esc(y.serial)}</h2>
+    <p class="muted">重新檢驗過、貼了新的合格標示，舊條碼 ${esc(y.label_code || '（沒有）')} 會留在紀錄裡。</p>
+    <label>新貼紙條碼</label><div class="row"><input name="label_code" required autocomplete="off" style="flex:1"><button type="button" data-scan>📷 掃</button></div>
+    <label>新的下次檢驗期限（民國）</label>${dateSelHTML('next_due', '', false)}
+    <label>定期檢驗日期（民國） <span class="muted">選填</span></label>${dateSelHTML('inspected_on', '', true)}
+    <p class="row"><button class="primary">存檔</button><button type="button" data-close>取消</button></p></form>`;
+  const f = $('form', dlg);
+  $('[data-close]', dlg).onclick = () => dlg.close();
+  $('[data-scan]', dlg).onclick = async () => { const v = await Scan.barcode('掃新貼紙的條碼'); if (v) f.label_code.value = v.toUpperCase(); };
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const next = readDateSel(dlg, 'next_due');
+    if (!next) return toast('請選新的下次檢驗期限', 'bad');
+    try { const r = await api('POST', `/api/cylinders/${id}/relabel`, { label_code: f.label_code.value, next_due: next, inspected_on: readDateSel(dlg, 'inspected_on') }); toast('已換新貼紙', 'ok'); dlg.close(); done && done(r); }
+    catch (err) { toast(err.message, 'bad'); }
+  };
+  dlg.showModal();
+}
+// 新登記（可以先帶入掃到的條碼）
+function cylinderNewDialog(code, office, done) {
+  const dlg = document.createElement('dialog'); document.body.appendChild(dlg);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.innerHTML = `<form><h2 style="margin-top:0">＋ 登記鋼瓶</h2>${cylinderFormHTML({ label_code: code || '' }, office)}
+    <p class="row"><button class="primary">登記</button><button type="button" data-close>取消</button></p></form>`;
+  $('[data-close]', dlg).onclick = () => dlg.close();
+  bindCylinderForm(dlg, {}, office, r => { dlg.close(); done && done(r); });
+  dlg.showModal();
+}
+// 掃條碼 → 找到就顯示，找不到就問要不要登記
+async function scanCylinder(box, office, reload) {
+  const code = await Scan.barcode('掃鋼瓶貼紙上的條碼');
+  if (!code) return;
+  let r;
+  try { r = await api('GET', '/api/cylinders/lookup?code=' + encodeURIComponent(code)); }
+  catch (err) { return toast(err.network ? '沒連線，連上店裡電腦才查得到' : err.message, 'bad'); }
+  if (r.found) { box.innerHTML = cylinderCardHTML(r.cylinder, r.by); if (r.cylinder.due_state === 'overdue') { beep(); } return; }
+  box.innerHTML = `<div class="card"><p>條碼 <b>${esc(r.code)}</b> 還沒登記。</p>
+    <p class="row"><button type="button" class="primary" data-new>＋ 登記這支新鋼瓶</button><button type="button" data-link>這是換新貼紙的舊鋼瓶</button></p></div>`;
+  $('[data-new]', box).onclick = () => cylinderNewDialog(r.code, office, y => { box.innerHTML = cylinderCardHTML(y); reload && reload(); });
+  $('[data-link]', box).onclick = async () => {
+    const serial = prompt('這支鋼瓶的「容器號碼」是多少？');
+    if (!serial) return;
+    const f = await api('GET', '/api/cylinders/lookup?code=' + encodeURIComponent(serial)).catch(() => ({ found: false }));
+    if (!f.found) return toast('找不到容器號碼 ' + serial + '，請按「登記這支新鋼瓶」', 'bad');
+    relabelDialog(f.cylinder.id, y => { box.innerHTML = cylinderCardHTML(y); reload && reload(); });
+    setTimeout(() => { const i = $('dialog[open] [name=label_code]'); if (i) i.value = r.code; }, 50);
+  };
+}
+function bindCylinderCards(root, office, reload) {
+  root.addEventListener('click', e => {
+    const ed = e.target.closest('[data-edit]'), rl = e.target.closest('[data-relabel]');
+    const after = y => { const card = (ed || rl).closest('.card'); if (card && card.parentNode.id === 'cylscan') card.outerHTML = cylinderCardHTML(y); reload && reload(); };
+    if (ed) cylinderEditDialog(ed.dataset.edit, office, after);
+    if (rl) relabelDialog(rl.dataset.relabel, after);
+  });
+}
+const CYL_FILTERS = [['', '使用中'], ['soon', '快到期'], ['overdue', '過期'], ['scrapped', '報廢'], ['all', '全部']];
+// 店裡：商品庫存 → 鋼瓶
+async function cylinderPage(view, arg) {
+  const filter = arg || '';
+  const [list, sum] = await Promise.all([data('/api/cylinders' + (filter ? '?filter=' + filter : '')), data('/api/cylinders/summary')]);
+  view.innerHTML = `<p><a href="#/stock">← 商品庫存</a></p>
+    <h2>鋼瓶 <span class="muted" style="font-size:15px;font-weight:400">使用中 ${sum.total} 支</span>
+      ${sum.overdue ? `<span class="pill due-bad">過期 ${sum.overdue}</span>` : ''} ${sum.soon ? `<span class="pill due-soon">30 天內到期 ${sum.soon}</span>` : ''}</h2>
+    <div class="row" style="margin-bottom:10px"><button class="primary" id="cnew">＋ 登記鋼瓶</button><button id="cscan">📷 掃條碼找</button>
+      <input id="cq" placeholder="找容器號碼、條碼、客人" style="flex:1;min-width:180px"></div>
+    <div id="cylscan"></div>
+    <div class="segment" style="margin-bottom:10px">${CYL_FILTERS.map(([k, t]) => `<button type="button" data-f="${k}" class="${k === filter ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <div class="card table-wrap"><table id="ct"></table></div>`;
+  const reload = () => { store.del('c:/api/cylinders/summary'); cylinderPage(view, filter); };
+  const draw = () => {
+    const v = $('#cq').value.trim().toUpperCase();
+    const rows = list.filter(y => !v || [y.serial, y.label_code, y.customer_name].some(x => (x || '').toUpperCase().includes(v)));
+    $('#ct').innerHTML = `<tr><th>容器號碼</th><th>規格</th><th>下次檢驗期限</th><th>狀態</th><th>在哪</th><th>貼紙條碼</th><th>備註</th></tr>` +
+      (rows.map(y => `<tr class="click ${y.due_state === 'overdue' ? 'bad' : ''}" data-edit="${y.id}"><td><b>${esc(y.serial)}</b></td><td>${y.size_kg ? fmtDeg(y.size_kg) + ' kg' : ''}</td>
+        <td>${rocDate(y.next_due)}</td><td>${duePill(y)}</td><td>${CYL_STATUS[y.status] || ''}${y.customer_name ? '：' + esc(y.customer_name) : ''}</td>
+        <td class="muted">${esc(y.label_code || '')}</td><td class="muted">${esc(y.note || '')}</td></tr>`).join('')
+      || '<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">沒有鋼瓶。按「＋ 登記鋼瓶」或「📷 掃條碼找」開始登記。</td></tr>');
+  };
+  draw();
+  $('#cq').oninput = draw;
+  $('.segment', view).onclick = e => { const b = e.target.closest('[data-f]'); if (b) location.hash = '#/cylinders' + (b.dataset.f ? '/' + b.dataset.f : ''); };
+  $('#cnew').onclick = () => cylinderNewDialog('', true, reload);
+  $('#cscan').onclick = () => scanCylinder($('#cylscan'), true, reload);
+  bindCylinderCards(view, true, reload);
+}
+// 師傅手機：鋼瓶（掃條碼、登記、看快到期）
+async function driverCylinders(view) {
+  const [soon, over] = await Promise.all([data('/api/cylinders?filter=soon'), data('/api/cylinders?filter=overdue')]);
+  view.innerHTML = `<h2>鋼瓶</h2>
+    <p><button class="ok lg" id="cscan" style="width:100%">📷 掃鋼瓶條碼</button></p>
+    <p class="row"><button id="cnew">＋ 沒條碼，直接登記</button><button class="info-btn" data-paidinfo title="付費辨識說明">ⓘ</button></p>
+    <div id="cylscan"></div>
+    ${over.length ? `<h3>過期，不能送出（${over.length}）</h3>${over.map(y => cylinderCardHTML(y)).join('')}` : ''}
+    ${soon.length ? `<h3>30 天內到期（${soon.length}）</h3>${soon.map(y => cylinderCardHTML(y)).join('')}` : ''}
+    ${!over.length && !soon.length ? '<p class="muted">沒有過期或快到期的鋼瓶。</p>' : ''}`;
+  const reload = () => { store.del('c:/api/cylinders?filter=soon'); store.del('c:/api/cylinders?filter=overdue'); };
+  $('#cscan').onclick = () => scanCylinder($('#cylscan'), false, reload);
+  $('#cnew').onclick = () => cylinderNewDialog('', false, y => { $('#cylscan').innerHTML = cylinderCardHTML(y); reload(); });
+  $('[data-paidinfo]', view).onclick = () => Scan.paidInfo();
+  bindCylinderCards(view, false, reload);
+}
+
 document.addEventListener('keydown', e => { if (e.key === 'F2' && S.me && S.me.role !== 'driver') { e.preventDefault(); location.hash = '#/home'; } });
 
 // ---------------------------------------------------------------------

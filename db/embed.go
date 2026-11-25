@@ -35,3 +35,8 @@ var Meter string
 //
 //go:embed extras.sql
 var Extras string
+
+// Cylinders 鋼瓶清單（容器號碼、檢驗期限、標籤條碼）。每次開程式都跑（沒有才建），不佔版本號。
+//
+//go:embed cylinders.sql
+var Cylinders string
