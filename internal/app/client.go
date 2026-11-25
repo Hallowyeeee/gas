@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -31,6 +33,7 @@ type Client struct {
 	via     string // "lan" 店內直連；"public" 外面網址；"" 連不到
 	lastErr string
 	checked time.Time
+	token   string // 程式視窗登入的通行證（轉送時看到就記下來），F12 抓舊資料轉給主電腦要用
 	kick    chan struct{}
 
 	lanTimeout, publicTimeout time.Duration
@@ -332,6 +335,8 @@ func (c *Client) Handler() http.Handler {
 		}
 		writeJSON(w, 200, map[string]bool{"ok": ok})
 	})
+	m.HandleFunc("POST /api/local/capture", c.capture)
+	m.HandleFunc("OPTIONS /api/local/capture", c.capture)
 	m.HandleFunc("/api/local/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "這台是分機，這個功能要在主電腦上用"})
 	})
@@ -397,6 +402,7 @@ func (c *Client) forward(w http.ResponseWriter, r *http.Request) {
 		c.offline(w, r, isAPI)
 		return
 	}
+	c.rememberToken(r)
 	rp := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(up)
@@ -407,6 +413,13 @@ func (c *Client) forward(w http.ResponseWriter, r *http.Request) {
 		FlushInterval: -1, // 即時更新（來電、派單）馬上送到
 		ModifyResponse: func(resp *http.Response) error {
 			// 外面網址回來的登入 cookie 有 Secure，程式視窗是 http://localhost，拿掉才存得住
+			for _, ck := range resp.Cookies() {
+				if ck.Name == sessionCookie && ck.Value != "" && ck.MaxAge >= 0 {
+					c.mu.Lock()
+					c.token = ck.Value
+					c.mu.Unlock()
+				}
+			}
 			if sc := resp.Header.Values("Set-Cookie"); len(sc) > 0 {
 				resp.Header.Del("Set-Cookie")
 				for _, v := range sc {
@@ -441,4 +454,109 @@ func (c *Client) offline(w http.ResponseWriter, r *http.Request, isAPI bool) {
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	http.FileServer(http.FS(c.Static)).ServeHTTP(w, r)
+}
+
+// rememberToken 記下程式視窗用的登入通行證。
+func (c *Client) rememberToken(r *http.Request) {
+	tok := ""
+	if ck, err := r.Cookie(sessionCookie); err == nil {
+		tok = ck.Value
+	} else if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
+		tok = strings.TrimPrefix(h, "Bearer ")
+	}
+	if tok != "" {
+		c.mu.Lock()
+		c.token = tok
+		c.mu.Unlock()
+	}
+}
+
+// legacyOrigin 書籤小工具只收舊系統（easy88）或本機送來的。
+func legacyOrigin(origin string) bool {
+	if origin == "" || origin == "null" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "localhost" || host == "127.0.0.1" || host == defaultLegacyHosts || strings.HasSuffix(host, "."+defaultLegacyHosts)
+}
+
+// capture 分機按 F12：在這台先挑出讀得懂的客戶頁，用程式視窗登入的身分轉給主電腦，
+// 主電腦排進待確認後，每台電腦（含這台）都會跳確認視窗。
+func (c *Client) capture(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin != "" && legacyOrigin(origin) {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Vary", "Origin")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Private-Network", "true")
+	}
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if !legacyOrigin(origin) {
+		writeErr(w, forbidden())
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxCaptureBytes)
+	if err := r.ParseForm(); err != nil {
+		writeCaptureResult(w, nil, bad("讀取失敗："+err.Error()))
+		return
+	}
+	page, _, err := pickLegacyPage(r.PostForm)
+	if err != nil {
+		writeCaptureResult(w, nil, err)
+		return
+	}
+	res, err := c.sendCapture(r.Context(), page)
+	writeCaptureResult(w, res, err)
+	if err == nil && c.Show != nil {
+		go c.Show()
+	}
+}
+
+// sendCapture 把網頁轉給主電腦的 /api/legacy/upload。
+func (c *Client) sendCapture(ctx context.Context, page string) (map[string]any, error) {
+	up := c.current()
+	if up == nil {
+		c.Kick()
+		return nil, bad("這台分機現在連不到主電腦，等右上角連線恢復再按一次 F12")
+	}
+	c.mu.Lock()
+	tok := c.token
+	c.mu.Unlock()
+	if tok == "" {
+		return nil, bad("請先打開這台的瓦斯行程式並登入，再按一次 F12")
+	}
+	body, _ := json.Marshal(map[string]string{"html": page})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(up.String(), "/")+"/api/legacy/upload", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := (&http.Client{Transport: c.transport, Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		c.Kick()
+		return nil, bad("轉給主電腦失敗：" + shortErr(err))
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out)
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, bad("這台的瓦斯行程式登入過期了，請重新登入再按一次 F12")
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := out["error"].(string)
+		if msg == "" {
+			msg = resp.Status
+		}
+		return nil, bad(msg)
+	}
+	return out, nil
 }

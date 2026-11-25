@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -218,5 +220,44 @@ func TestClientMainDown(t *testing.T) {
 	cl.Pick(context.Background())
 	if e, _ := cl.status()["error"].(string); !strings.Contains(e, "沒有回應") {
 		t.Fatalf("原因不清楚：%q", e)
+	}
+}
+
+// 分機按 F12：書籤小工具送到分機，分機用程式視窗的登入身分轉給主電腦排進待確認
+func TestClientLegacyCapture(t *testing.T) {
+	_, c0 := setup(t)
+	res := c0.ok("POST", "/api/setup", map[string]any{"name": "老闆", "login_name": "boss", "password": "secret123"})
+	c := c0.as(res["token"].(string))
+	st := &Station{Mode: "client", Server: "http://127.0.0.1:1", ManualIP: c0.srv.URL}
+	cl := &Client{St: st, File: filepath.Join(t.TempDir(), "station.json"), lanTimeout: time.Second, publicTimeout: time.Second, discoverTargets: []string{}}
+	cl.Pick(context.Background())
+	front := httptest.NewServer(cl.Handler())
+	defer front.Close()
+
+	page, _ := os.ReadFile("testdata/easy88_order_form.html")
+	post := func() (int, string) {
+		form := url.Values{"enc": {"uri"}, "url": {"http://www.easy88.com.tw:20040/gas_station/order/order_form.asp"}, "title": {""}, "html": {strings.ReplaceAll(url.QueryEscape(string(page)), "+", "%20")}}
+		req, _ := http.NewRequest("POST", front.URL+"/api/local/capture", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", "http://www.easy88.com.tw:20040")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	// 程式視窗還沒登入過：提醒先登入
+	if code, body := post(); code != 400 || !strings.Contains(body, "登入") {
+		t.Fatalf("沒登入應該提醒，%d %s", code, body)
+	}
+	fc := &client{t, front, c.token}
+	fc.ok("GET", "/api/me", nil) // 程式視窗開著、登入了
+	if code, body := post(); code != 200 || !strings.Contains(body, "已送到瓦斯行") {
+		t.Fatalf("分機轉送失敗，%d %s", code, body)
+	}
+	if l := c.list("/api/legacy/captures"); len(l) != 1 {
+		t.Fatal("主電腦應該有一筆待確認", l)
 	}
 }

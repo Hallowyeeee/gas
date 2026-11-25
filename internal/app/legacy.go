@@ -104,9 +104,18 @@ func (a *App) localCapture(w http.ResponseWriter, r *http.Request) {
 // captureFromForm：書籤小工具可能送來好幾個框架的網頁（enc=uri 表示有編碼過，避免中文編碼問題），
 // 找出讀得懂的那一頁；都讀不懂就列出收到哪些頁，方便查原因。
 func (a *App) captureFromForm(ctx context.Context, f url.Values) (map[string]any, error) {
+	page, src, err := pickLegacyPage(f)
+	if err != nil {
+		return nil, err
+	}
+	return a.addCapture(ctx, src, page)
+}
+
+// pickLegacyPage 從書籤小工具送來的好幾頁裡，挑出第一個讀得懂的客戶頁。
+func pickLegacyPage(f url.Values) (page, src string, err error) {
 	pages, urls, titles := f["html"], f["url"], f["title"]
 	if len(pages) == 0 {
-		return nil, bad("沒有收到網頁內容")
+		return "", "", bad("沒有收到網頁內容")
 	}
 	var diag []string
 	for i, page := range pages {
@@ -123,7 +132,7 @@ func (a *App) captureFromForm(ctx context.Context, f url.Values) (map[string]any
 			title = titles[i]
 		}
 		if _, err := ParseLegacyPage(page); err == nil {
-			return a.addCapture(ctx, src, page)
+			return page, src, nil
 		}
 		short := src
 		if j := strings.Index(short, "?"); j > 0 {
@@ -135,7 +144,7 @@ func (a *App) captureFromForm(ctx context.Context, f url.Values) (map[string]any
 		diag = append(diag, fmt.Sprintf("%s〔%s〕%d 字", short, title, len([]rune(page))))
 	}
 	log.Println("抓舊資料失敗，收到：", strings.Join(diag, "；"))
-	return nil, bad(errNotCustomerPage.Error() + "（收到：" + strings.Join(diag, "；") + "）")
+	return "", "", bad(errNotCustomerPage.Error() + "（收到：" + strings.Join(diag, "；") + "）")
 }
 
 // writeCaptureResult 小視窗顯示結果，成功的話 1.5 秒後自己關掉。
